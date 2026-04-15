@@ -2810,24 +2810,21 @@ function exportarBackup() {
   };
   const json     = JSON.stringify(backup, null, 2);
   const filename = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
-
-  // Intentar descarga directa
-  try {
-    const blob = new Blob([json], { type: 'application/json' });
-    const url  = window.URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = filename; a.style.display = 'none';
-    document.body.appendChild(a);
+  const blob     = new Blob([json], { type: 'application/json' });
+  const url      = window.URL.createObjectURL(blob);
+  const a        = document.createElement('a');
+  a.setAttribute('href', url);
+  a.setAttribute('download', filename);
+  a.style.position = 'fixed';
+  a.style.top = '-100px';
+  document.body.appendChild(a);
+  setTimeout(() => {
     a.click();
-    setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 500);
-  } catch(e) {}
-
-  // Abrir también en nueva pestaña como fallback (Ctrl+S para guardar)
-  const win = window.open('', '_blank');
-  if (win) {
-    win.document.write('<pre style="font-family:monospace;white-space:pre-wrap;word-break:break-all;">' + json.replace(/</g,'&lt;') + '</pre>');
-    win.document.title = filename;
-  }
+    setTimeout(() => {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+  }, 100);
 }
 
 function importarBackup(event) {
