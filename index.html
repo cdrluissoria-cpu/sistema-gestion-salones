@@ -2803,28 +2803,18 @@ document.querySelector('[onclick="openModal(\'modal-cliente\')"]').addEventListe
 const clientes = []; // { nombre, fnac, cel, email, dom, agasNombre, agasFnac, obs }
 
 function exportarBackup() {
-  const backup = {
-    version: 1,
-    fecha: new Date().toISOString(),
-    fiestas, ctaCteData, conceptos, clientes,
-  };
-  const json     = JSON.stringify(backup, null, 2);
+  const backup = { version:1, fecha:new Date().toISOString(), fiestas, ctaCteData, conceptos, clientes };
+  const json = JSON.stringify(backup, null, 2);
   const filename = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
-  const blob     = new Blob([json], { type: 'application/json' });
-  const url      = window.URL.createObjectURL(blob);
-  const a        = document.createElement('a');
-  a.setAttribute('href', url);
-  a.setAttribute('download', filename);
-  a.style.position = 'fixed';
-  a.style.top = '-100px';
+  
+  const a = Object.assign(document.createElement('a'), {
+    href: 'data:text/json;charset=utf-8,' + encodeURIComponent(json),
+    download: filename,
+    style: 'display:none'
+  });
   document.body.appendChild(a);
-  setTimeout(() => {
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    }, 1000);
-  }, 100);
+  a.click();
+  a.remove();
 }
 
 function importarBackup(event) {
