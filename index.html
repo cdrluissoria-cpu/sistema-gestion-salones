@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Élite Salones · Sistema de Gestión</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAHpN8ktCyvXrRH5BZIaxUZ3NWQohN0J08",
+  authDomain: "gestion-salones-4c945.firebaseapp.com",
+  projectId: "gestion-salones-4c945",
+  storageBucket: "gestion-salones-4c945.firebasestorage.app",
+  messagingSenderId: "51067421547",
+  appId: "1:51067421547:web:7e4e32c5753d1401eb822e"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -695,8 +712,46 @@ select.form-input option { background: var(--surface2); }
 </head>
 <body>
 
+<!-- ═══════════════════ PANTALLA DE LOGIN ═══════════════════ -->
+<div id="login-screen" style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:var(--bg);padding:20px;">
+  <div style="background:var(--surface);border:1px solid var(--border-gold);border-radius:16px;padding:36px 32px;width:100%;max-width:400px;">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:600;color:var(--gold);">Élite Salones</div>
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);margin-top:4px;">Sistema de Gestión</div>
+    </div>
+
+    <!-- Tabs login/registro -->
+    <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:24px;">
+      <button id="tab-login" onclick="switchAuthTab('login')" style="flex:1;padding:7px;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;background:var(--gold);color:#0e0d11;transition:all .15s;">Iniciar sesión</button>
+      <button id="tab-registro" onclick="switchAuthTab('registro')" style="flex:1;padding:7px;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:400;cursor:pointer;background:transparent;color:var(--text-muted);transition:all .15s;">Registrarse</button>
+    </div>
+
+    <div id="auth-error" style="display:none;background:var(--red-bg);border:1px solid rgba(224,96,96,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:16px;"></div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div id="campo-nombre" style="display:none;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px;">Nombre del salón</div>
+        <input class="form-input" id="auth-salon" placeholder="Ej: Salón Las Rosas">
+      </div>
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px;">Correo electrónico</div>
+        <input class="form-input" id="auth-email" type="email" placeholder="correo@mail.com">
+      </div>
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px;">Contraseña</div>
+        <input class="form-input" id="auth-pass" type="password" placeholder="••••••••">
+      </div>
+      <button id="auth-btn" onclick="doAuth()" class="btn btn-primary" style="width:100%;padding:11px;font-size:14px;margin-top:4px;">Iniciar sesión</button>
+    </div>
+
+    <div id="forgot-link" style="text-align:center;margin-top:14px;">
+      <span onclick="resetPassword()" style="font-size:12px;color:var(--gold);cursor:pointer;opacity:.8;">¿Olvidaste tu contraseña?</span>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar" id="sidebar" style="display:none;">
   <div class="brand">
     <div class="brand-name">Élite Salones</div>
     <div class="brand-sub">Sistema de Gestión</div>
@@ -754,7 +809,7 @@ select.form-input option { background: var(--surface2); }
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <!-- ═══════════════════════════ MAIN ═══════════════════════════ -->
-<main class="main">
+<main class="main" id="main-app" style="display:none;">
 
   <!-- TOP BAR -->
   <header class="topbar">
@@ -1804,18 +1859,21 @@ function agregarConcepto() {
   conceptos.push({ id: newId, nombre, clasif });
   document.getElementById('nuevo-concepto-nombre').value = '';
   renderConceptosLista();
+  guardarLocal();
 }
 
 function eliminarConcepto(id) {
   const idx = conceptos.findIndex(c => c.id === id);
   if (idx > -1) conceptos.splice(idx, 1);
   renderConceptosLista();
+  guardarLocal();
 }
 
 function cambiarClasif(id, nuevaClasif) {
   const c = conceptos.find(x => x.id === id);
   if (c) c.clasif = nuevaClasif;
   renderConceptosLista();
+  guardarLocal();
 }
 
 // Init conceptos when modal-pago opens
@@ -2151,6 +2209,7 @@ function setEstadoManual(id, estado) {
   if (!f) return;
   f.estadoManual = estado;
   renderFiestas();
+  guardarLocal();
   closeModal('modal-fiesta');
 }
 
@@ -2237,6 +2296,7 @@ function guardarFiesta() {
   else { obsWrap.style.display = 'none'; }
 
   closeModal('modal-fiesta');
+  guardarLocal();
   openModal('modal-recibo');
 }
 
@@ -2502,7 +2562,8 @@ function registrarCobroInline(nombre) {
   const fechaStr = hoy.getDate().toString().padStart(2,'0') + '/' + (hoy.getMonth()+1).toString().padStart(2,'0') + '/' + hoy.getFullYear();
   ctaCteData[nombre].movimientos.unshift({ fecha: fechaStr, concepto: 'Cobro registrado', medio, importe });
   renderCtaCte();
-  renderFiestas(); // sincronizar tabla de fiestas
+  renderFiestas();
+  guardarLocal();
 }
 
 // ── GUARDAR CLIENTE ──
@@ -2530,6 +2591,7 @@ function guardarCliente() {
   renderClientes();
   closeModal('modal-cliente');
   _editingClienteIdx = null;
+  guardarLocal();
 }
 
 function initials(n) { return n.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'??'; }
@@ -2643,6 +2705,8 @@ function importarBackup(event) {
       renderFiestas();
       renderCal();
       renderConceptoSelect();
+      renderClientes();
+      guardarLocal();
       alert('✓ Datos importados correctamente');
     } catch(err) {
       alert('Error al leer el archivo. Verificá que sea un backup válido.');
@@ -2652,14 +2716,176 @@ function importarBackup(event) {
   event.target.value = '';
 }
 
-// Init
+// ── FIREBASE AUTH + FIRESTORE ──
+let currentUID = null;
+let authTab = 'login';
+
+function switchAuthTab(tab) {
+  authTab = tab;
+  document.getElementById('tab-login').style.background    = tab==='login'    ? 'var(--gold)' : 'transparent';
+  document.getElementById('tab-login').style.color         = tab==='login'    ? '#0e0d11'    : 'var(--text-muted)';
+  document.getElementById('tab-registro').style.background = tab==='registro' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tab-registro').style.color      = tab==='registro' ? '#0e0d11'    : 'var(--text-muted)';
+  document.getElementById('campo-nombre').style.display    = tab==='registro' ? 'block' : 'none';
+  document.getElementById('auth-btn').textContent          = tab==='login'    ? 'Iniciar sesión' : 'Crear cuenta';
+  document.getElementById('forgot-link').style.display     = tab==='login'    ? 'block' : 'none';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function doAuth() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-pass').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+  if (!email || !pass) { showAuthError('Completá email y contraseña.'); return; }
+
+  if (authTab === 'login') {
+    auth.signInWithEmailAndPassword(email, pass)
+      .catch(e => showAuthError(traducirError(e.code)));
+  } else {
+    const salon = document.getElementById('auth-salon').value.trim();
+    if (!salon) { showAuthError('Ingresá el nombre del salón.'); return; }
+    auth.createUserWithEmailAndPassword(email, pass)
+      .then(cred => {
+        db.collection('usuarios').doc(cred.user.uid).collection('config').doc('salon')
+          .set({ nombre: salon, email, creadoEn: new Date().toISOString() });
+      })
+      .catch(e => showAuthError(traducirError(e.code)));
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function traducirError(code) {
+  const m = {
+    'auth/invalid-email': 'El email no es válido.',
+    'auth/user-not-found': 'No existe una cuenta con ese email.',
+    'auth/wrong-password': 'Contraseña incorrecta.',
+    'auth/email-already-in-use': 'Ese email ya tiene una cuenta.',
+    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+    'auth/invalid-credential': 'Email o contraseña incorrectos.',
+    'auth/too-many-requests': 'Demasiados intentos. Esperá unos minutos.',
+  };
+  return m[code] || 'Error: ' + code;
+}
+
+function resetPassword() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { showAuthError('Ingresá tu email primero.'); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(() => showAuthError('✓ Te enviamos un email para restablecer tu contraseña.'))
+    .catch(e => showAuthError(traducirError(e.code)));
+}
+
+function cerrarSesion() {
+  auth.signOut();
+}
+
+// Firestore sync
+async function cargarFirestore(uid) {
+  try {
+    const base = db.collection('usuarios').doc(uid).collection('datos');
+    const [fSnap, clSnap, ccSnap, coSnap] = await Promise.all([
+      base.doc('fiestas').get(),
+      base.doc('clientes').get(),
+      base.doc('ctacte').get(),
+      base.doc('conceptos').get(),
+    ]);
+    if (fSnap.exists  && fSnap.data().lista)  { fiestas.length=0;   fSnap.data().lista.forEach(x=>fiestas.push(x)); }
+    if (clSnap.exists && clSnap.data().lista) { clientes.length=0;  clSnap.data().lista.forEach(x=>clientes.push(x)); }
+    if (ccSnap.exists && ccSnap.data().mapa)  { Object.keys(ctaCteData).forEach(k=>delete ctaCteData[k]); Object.assign(ctaCteData, ccSnap.data().mapa); }
+    if (coSnap.exists && coSnap.data().lista) { conceptos.length=0; coSnap.data().lista.forEach(x=>conceptos.push(x)); }
+  } catch(e) { console.warn('Error cargando Firestore:', e); }
+}
+
+async function guardarFirestore() {
+  if (!currentUID) return;
+  try {
+    const base = db.collection('usuarios').doc(currentUID).collection('datos');
+    await Promise.all([
+      base.doc('fiestas').set({ lista: fiestas }),
+      base.doc('clientes').set({ lista: clientes }),
+      base.doc('ctacte').set({ mapa: ctaCteData }),
+      base.doc('conceptos').set({ lista: conceptos }),
+    ]);
+  } catch(e) { console.warn('Error guardando Firestore:', e); }
+}
+
+// Reemplazar guardarLocal para que también guarde en Firestore
+const _guardarLocalOrig = guardarLocal;
+guardarLocal = function() {
+  _guardarLocalOrig();
+  guardarFirestore();
+};
+
+// Detectar estado de autenticación
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    currentUID = user.uid;
+    // Cargar datos
+    cargarLocal(); // localStorage como cache rápido
+    await cargarFirestore(user.uid); // luego Firestore sobreescribe
+    // Mostrar app
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('sidebar').style.display = 'flex';
+    document.getElementById('main-app').style.display = 'flex';
+    // Agregar botón cerrar sesión al sidebar footer
+    const footer = document.querySelector('.sidebar-footer');
+    if (footer && !document.getElementById('btn-logout')) {
+      const btn = document.createElement('button');
+      btn.id = 'btn-logout';
+      btn.className = 'btn';
+      btn.textContent = '→ Cerrar sesión';
+      btn.style.cssText = 'width:100%;font-size:12px;padding:7px;color:var(--red);border-color:rgba(224,96,96,0.3);';
+      btn.onclick = cerrarSesion;
+      footer.querySelector('div').appendChild(btn);
+    }
+    renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
+  } else {
+    currentUID = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('sidebar').style.display = 'none';
+    document.getElementById('main-app').style.display = 'none';
+  }
+});
+
+// Enter en campos de login
+['auth-email','auth-pass','auth-salon'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('keydown', e => { if(e.key==='Enter') doAuth(); });
+});
+
+// ── PERSISTENCIA LOCAL (localStorage) ──
+function guardarLocal() {
+  try {
+    localStorage.setItem('es_fiestas',    JSON.stringify(fiestas));
+    localStorage.setItem('es_clientes',   JSON.stringify(clientes));
+    localStorage.setItem('es_ctacte',     JSON.stringify(ctaCteData));
+    localStorage.setItem('es_conceptos',  JSON.stringify(conceptos));
+  } catch(e) { console.warn('localStorage lleno:', e); }
+}
+
+function cargarLocal() {
+  try {
+    const f  = localStorage.getItem('es_fiestas');
+    const cl = localStorage.getItem('es_clientes');
+    const cc = localStorage.getItem('es_ctacte');
+    const co = localStorage.getItem('es_conceptos');
+    if (f)  { const d=JSON.parse(f);  fiestas.length=0;  d.forEach(x=>fiestas.push(x)); }
+    if (cl) { const d=JSON.parse(cl); clientes.length=0; d.forEach(x=>clientes.push(x)); }
+    if (cc) { const d=JSON.parse(cc); Object.keys(ctaCteData).forEach(k=>delete ctaCteData[k]); Object.assign(ctaCteData, d); }
+    if (co) { const d=JSON.parse(co); conceptos.length=0; d.forEach(x=>conceptos.push(x)); }
+  } catch(e) { console.warn('Error cargando datos:', e); }
+}
+
+// Init (se ejecuta al cargar, auth.onAuthStateChanged maneja el render)
 calcPrice();
 calcTarget();
-renderFiestas();
-renderCal();
-renderConceptoSelect();
 initCostLines();
-renderClientes();
 </script>
 </body>
 </html>
