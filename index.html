@@ -2423,11 +2423,31 @@ function renderNegocio() {
       porMes[k].ingresos += f.total||0;
     });
     pagos.forEach(p => {
-      if (!p.fecha) return;
-      const [dd,mm,yyyy] = (p.fecha||'').split('/');
-      if (!mm||!yyyy) return;
-      const k = yyyy + '-' + (parseInt(mm)-1);
-      if (porMes[k]) porMes[k].gastos += p.importe||0;
+      let k = null;
+      // Si el pago está vinculado a una fiesta, usar el mes de la fiesta
+      if (p.fiestaId) {
+        const f = fiestas.find(x => x.id === p.fiestaId && x.estadoManual === 'real');
+        if (f && f.fEvento) {
+          const d = new Date(f.fEvento+'T00:00:00');
+          k = d.getFullYear() + '-' + d.getMonth();
+        }
+      }
+      // Si no tiene fiesta vinculada o la fiesta no está realizada, usar el mes del pago
+      if (!k) {
+        if (!p.fechaISO && !p.fecha) return;
+        if (p.fechaISO) {
+          const d = new Date(p.fechaISO+'T00:00:00');
+          k = d.getFullYear() + '-' + d.getMonth();
+          if (!porMes[k]) porMes[k] = { mes: MESES_N[d.getMonth()], anio: d.getFullYear(), fiestas:0, ingresos:0, gastos:0 };
+        } else {
+          const [dd,mm,yyyy] = (p.fecha||'').split('/');
+          if (!mm||!yyyy) return;
+          const d = new Date(parseInt(yyyy), parseInt(mm)-1, 1);
+          k = yyyy + '-' + (parseInt(mm)-1);
+          if (!porMes[k]) porMes[k] = { mes: MESES_N[parseInt(mm)-1], anio: parseInt(yyyy), fiestas:0, ingresos:0, gastos:0 };
+        }
+      }
+      if (k && porMes[k]) porMes[k].gastos += p.importe||0;
     });
     const rows = Object.values(porMes).sort((a,b) => a.anio!==b.anio ? a.anio-b.anio : MESES_N.indexOf(a.mes)-MESES_N.indexOf(b.mes));
     if (!rows.length) {
@@ -3631,6 +3651,53 @@ function guardarPago() {
   guardarLocal();
 }
 
+function editarPagoInline(id) {
+  // Cerrar cualquier otra fila de edición abierta
+  document.querySelectorAll('[id^="pago-edit-row-"]').forEach(r => r.style.display='none');
+  const row = document.getElementById('pago-edit-row-'+id);
+  if (row) row.style.display = '';
+}
+
+function cancelarEdicionPago(id) {
+  const row = document.getElementById('pago-edit-row-'+id);
+  if (row) row.style.display = 'none';
+}
+
+function syncClasifFromConcepto(id) {
+  const sel = document.getElementById('pago-edit-nom-'+id);
+  if (!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  const clasif = opt?.dataset?.clasif;
+  const clasifSel = document.getElementById('pago-edit-clasif-'+id);
+  if (clasif && clasifSel) clasifSel.value = clasif;
+}
+
+function guardarEdicionPago(id) {
+  const idx = pagos.findIndex(p => p.id === id);
+  if (idx === -1) return;
+  const fechaISO    = document.getElementById('pago-edit-fecha-'+id)?.value || pagos[idx].fechaISO;
+  const nuevoImp    = parseFloat(document.getElementById('pago-edit-imp-'+id)?.value) || pagos[idx].importe;
+  const nuevoMed    = document.getElementById('pago-edit-med-'+id)?.value || pagos[idx].medio;
+  const nuevoClasif = document.getElementById('pago-edit-clasif-'+id)?.value || pagos[idx].clasif;
+  const fiestaSelVal = document.getElementById('pago-edit-fiesta-'+id)?.value;
+  const nuevoFiestaId = fiestaSelVal ? +fiestaSelVal : null;
+  // Leer concepto desde el select agrupado
+  const conceptoSel = document.getElementById('pago-edit-nom-'+id);
+  const conceptoId  = conceptoSel?.value ? +conceptoSel.value : pagos[idx].conceptoId;
+  const conceptoObj = conceptos.find(c => c.id === conceptoId);
+  const nuevoNom    = conceptoObj?.nombre || pagos[idx].nombre;
+  // Reconstruir fecha display
+  let fechaStr = pagos[idx].fecha;
+  if (fechaISO) {
+    const [y,m,d] = fechaISO.split('-');
+    fechaStr = `${d}/${m}/${y}`;
+  }
+  const nuevoObs    = document.getElementById('pago-edit-obs-'+id)?.value ?? pagos[idx].obs;
+  pagos[idx] = { ...pagos[idx], fechaISO, fecha: fechaStr, importe: nuevoImp, conceptoId, nombre: nuevoNom, medio: nuevoMed, clasif: nuevoClasif, fiestaId: nuevoFiestaId, obs: nuevoObs };
+  renderPagos(); renderCaja(); renderDashboard(); renderNegocio();
+  guardarLocal();
+}
+
 function borrarPago(id) {
   if (!confirm('¿Borrar este pago?')) return;
   const idx = pagos.findIndex(p=>p.id===id);
@@ -3656,17 +3723,87 @@ function renderPagos() {
   if(g('pagos-fijos'))     g('pagos-fijos').textContent     = fmt(estructura);
   const tbody=g('pagos-tbody'); if(!tbody) return;
   if(!pagos.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-dim);">Sin pagos registrados</td></tr>'; return; }
-  tbody.innerHTML=pagos.map(p=>{
-    const badge=p.clasif==='variable'
-      ?`<span style="font-size:11px;color:var(--amber);font-weight:500;">Variable</span>`
-      :p.clasif==='fijo'
-      ?`<span style="font-size:11px;color:var(--blue);font-weight:500;">Fijo</span>`
-      :`<span style="font-size:11px;color:var(--text-muted);">Estructura</span>`;
-    return `<tr>
-      <td class="muted">${p.fecha}</td><td>${p.nombre||p.obs||'—'}</td><td>${badge}</td>
+  tbody.innerHTML = pagos.map(p => {
+    const badge = p.clasif==='variable'
+      ? `<span style="font-size:11px;color:var(--amber);font-weight:500;">Variable</span>`
+      : p.clasif==='fijo'
+      ? `<span style="font-size:11px;color:var(--blue);font-weight:500;">Fijo</span>`
+      : `<span style="font-size:11px;color:var(--text-muted);">Estructura</span>`;
+    const f = fiestas.find(x => x.id === p.fiestaId);
+    const vinculo = f ? ` · ${f.agasajado}` : '';
+    return `<tr id="pago-row-${p.id}">
+      <td class="muted">${p.fecha}</td>
+      <td>${p.nombre||p.obs||'—'}${vinculo?`<span style="font-size:11px;color:var(--text-dim);">${vinculo}</span>`:''}</td>
+      <td>${badge}</td>
       <td class="muted">${p.medio}</td>
       <td style="text-align:right;color:var(--red);font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;">−${fmt(p.importe)}</td>
-      <td style="text-align:right;"><button class="btn" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:rgba(224,96,96,0.3);" onclick="borrarPago(${p.id})">✕</button></td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn" style="padding:3px 8px;font-size:11px;" onclick="editarPagoInline(${p.id})">✎</button>
+        <button class="btn" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:rgba(224,96,96,0.3);margin-left:3px;" onclick="borrarPago(${p.id})">✕</button>
+      </td>
+    </tr>
+    <tr id="pago-edit-row-${p.id}" style="display:none;background:var(--surface2);border-left:2px solid var(--gold);">
+      <td colspan="6" style="padding:14px 16px;">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--gold);margin-bottom:10px;">Editar pago</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Fecha</div>
+            <input class="form-input" id="pago-edit-fecha-${p.id}" type="date" value="${p.fechaISO||''}" style="font-size:13px;padding:6px 10px;">
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Concepto</div>
+            <div style="display:flex;gap:6px;">
+              <select class="form-input" id="pago-edit-nom-${p.id}" onchange="syncClasifFromConcepto(${p.id})" style="font-size:13px;padding:6px 10px;flex:1;">
+                <option value="">Seleccionar concepto...</option>
+                ${['variable','fijo','estructura'].map(cl => {
+                  const grp = conceptos.filter(c=>c.clasif===cl);
+                  if (!grp.length) return '';
+                  const lbl = cl==='variable'?'Costo Variable':cl==='fijo'?'Costo Fijo':'Gasto de Estructura';
+                  return `<optgroup label="${lbl}">${grp.map(c=>`<option value="${c.id}" data-clasif="${c.clasif}" ${p.conceptoId===c.id?'selected':''}>${c.nombre}</option>`).join('')}</optgroup>`;
+                }).join('')}
+              </select>
+            </div>
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Importe ($)</div>
+            <input class="form-input" id="pago-edit-imp-${p.id}" type="number" value="${p.importe}" style="font-size:13px;padding:6px 10px;font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--red);">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Categoría</div>
+            <select class="form-input" id="pago-edit-clasif-${p.id}" style="font-size:13px;padding:6px 10px;">
+              <option value="variable"  ${p.clasif==='variable' ?'selected':''}>Costo Variable</option>
+              <option value="fijo"      ${p.clasif==='fijo'     ?'selected':''}>Costo Fijo</option>
+              <option value="estructura"${p.clasif==='estructura'?'selected':''}>Gasto de Estructura</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Medio de pago</div>
+            <select class="form-input" id="pago-edit-med-${p.id}" style="font-size:13px;padding:6px 10px;">
+              <option ${p.medio==='Efectivo'    ?'selected':''}>Efectivo</option>
+              <option ${p.medio==='Transferencia'?'selected':''}>Transferencia</option>
+              <option ${p.medio==='Cheque'      ?'selected':''}>Cheque</option>
+              <option ${p.medio==='Débito'      ?'selected':''}>Débito</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:3px;">Vincular a fiesta</div>
+            <select class="form-input" id="pago-edit-fiesta-${p.id}" style="font-size:13px;padding:6px 10px;">
+              <option value="">Sin vincular</option>
+              ${fiestas.filter(f=>f.estadoManual!=='can').map(f=>`<option value="${f.id}" ${p.fiestaId===f.id?'selected':''}>${f.agasajado} · ${fmtDate(f.fEvento)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div class="form-label" style="margin-bottom:3px;">Observación</div>
+          <input class="form-input" id="pago-edit-obs-${p.id}" type="text" value="${p.obs||''}" placeholder="Descripción adicional..." style="font-size:13px;padding:6px 10px;width:100%;">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-primary" style="padding:7px 18px;font-size:13px;" onclick="guardarEdicionPago(${p.id})">✓ Guardar cambios</button>
+          <button class="btn" style="padding:7px 14px;font-size:13px;" onclick="cancelarEdicionPago(${p.id})">Cancelar</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -3852,8 +3989,8 @@ function cargarLocal() {
   try {
     // ── SEED DE DATOS ──
     // Cambiá SEED_ID cada vez que actualices los datos embebidos para forzar recarga.
-    const SEED_ID = 'backup-2026-04-15-v4';
-    const seed = {"fiestas":[{"cliente":"Soria Luis Alfredo","hInicio":"22:00","fContrato":"2026-04-15","agasajado":"Soria Luis Alfredo","obs":"","total":5500000,"estadoManual":null,"tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"cobrado":1000000,"fEvento":"2027-03-30","tipo":"Cumpleaños","id":1,"modalidad":"Salón con catering","hFin":"05:30","invitados":120}],"ctaCteData":{"Soria Luis Alfredo":{"movimientos":[{"medio":"Efectivo","importe":1000000,"fecha":"15/04/2026","concepto":"Seña inicial"}],"email":"luisorialfredo@hotmail.com","avatar":"SL","celular":"3863521669"}},"conceptos":[{"nombre":"DJ / Música","clasif":"variable","id":1},{"id":2,"nombre":"Catering","clasif":"variable"},{"nombre":"Decoración","clasif":"variable","id":3},{"clasif":"fijo","nombre":"Sueldos","id":4},{"clasif":"fijo","nombre":"Luz y servicios","id":5},{"id":6,"clasif":"fijo","nombre":"Limpieza"},{"id":7,"nombre":"Mantenimiento","clasif":"estructura"},{"nombre":"Publicidad","clasif":"estructura","id":8},{"nombre":"Alquiler","clasif":"estructura","id":9},{"id":10,"nombre":"Otro","clasif":"estructura"}],"clientes":[{"email":"luisorialfredo@hotmail.com","agasNombre":"Soria Luis Alfredo","nombre":"Soria Luis Alfredo","cel":"3863521669","fnac":"1979-03-30","dom":"24 de Septiembre - Monteros","obs":"Prueba","agasFnac":"1979-03-30"}],"cobros":[],"pagos":[]};
+    const SEED_ID = 'backup-2026-04-15-v6';
+    const seed = {"fiestas":[{"cliente":"Soria Luis Alfredo","invitados":120,"agasajado":"Soria Luis Alfredo","hFin":"05:30","tipo":"Cumpleaños","estadoManual":"real","tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"modalidad":"Salón con catering","fEvento":"2027-03-30","total":5500000,"fContrato":"2026-04-15","cobrado":2000000,"id":1,"hInicio":"22:00","obs":""}],"ctaCteData":{"Soria Luis Alfredo":{"movimientos":[{"fecha":"15/04/2026","concepto":"Cobro registrado","medio":"Transferencia","importe":500000},{"concepto":"Seña inicial","medio":"Efectivo","fecha":"15/04/2026","importe":1500000}],"celular":"3863521669","email":"luisorialfredo@hotmail.com","avatar":"SL"}},"conceptos":[{"clasif":"variable","id":2,"nombre":"Catering"},{"nombre":"Decoración","id":3,"clasif":"variable"},{"nombre":"Sueldos","id":4,"clasif":"fijo"},{"clasif":"fijo","nombre":"Luz y servicios","id":5},{"clasif":"fijo","nombre":"Limpieza","id":6},{"clasif":"estructura","id":7,"nombre":"Mantenimiento"},{"clasif":"estructura","id":8,"nombre":"Publicidad"},{"nombre":"Alquiler","id":9,"clasif":"estructura"},{"id":10,"nombre":"Otro","clasif":"estructura"},{"id":11,"nombre":"DJ","clasif":"fijo"}],"clientes":[{"obs":"Prueba","cel":"3863521669","fnac":"1979-03-30","dom":"24 de Septiembre - Monteros","agasFnac":"1979-03-30","agasNombre":"Soria Luis Alfredo","nombre":"Soria Luis Alfredo","email":"luisorialfredo@hotmail.com"}],"cobros":[],"pagos":[{"id":1,"fecha":"15/04/2026","fechaISO":"2026-04-15","importe":200000,"conceptoId":6,"nombre":"Limpieza","clasif":"fijo","medio":"Transferencia","fiestaId":1,"obs":""}]};
 
     const storedSeedId = localStorage.getItem('es_seed_id');
 
