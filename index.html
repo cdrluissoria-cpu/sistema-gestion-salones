@@ -1367,7 +1367,7 @@ select.form-input option { background: var(--surface2); }
 
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-fiesta')">Cancelar</button>
-      <button class="btn btn-primary" onclick="guardarFiesta()">Guardar fiesta</button>
+      <button class="btn btn-primary" id="btn-guardar-fiesta" data-edit-id="" onclick="guardarFiesta()">Guardar fiesta</button>
     </div>
   </div>
 </div>
@@ -2157,6 +2157,7 @@ function editFiesta(id) {
   const f = fiestas.find(x => x.id === id);
   if (!f) return;
   window._editingFiesta = id;
+  document.getElementById('btn-guardar-fiesta').dataset.editId = id;
 
   const modal = document.getElementById('modal-fiesta');
   modal.querySelector('.modal-title').textContent = 'Editar fiesta';
@@ -2217,6 +2218,7 @@ function setEstadoManual(id, estado) {
 // Reset modal on new fiesta
 document.querySelector('[onclick="openModal(\'modal-fiesta\')"]')?.addEventListener('click', () => {
   window._editingFiesta = null;
+  document.getElementById('btn-guardar-fiesta').dataset.editId = '';
   document.getElementById('modal-fiesta').querySelector('.modal-title').textContent = 'Nueva fiesta';
   document.querySelectorAll('#modal-fiesta input[type=date], #modal-fiesta input[type=time]').forEach(i => i.value = '');
   document.getElementById('sena-pct').value = '';
@@ -2271,7 +2273,11 @@ function guardarFiesta() {
   const invitados = tarifas.reduce((a,t) => a + t.pers, 0) || 0;
 
   // ── GUARDAR O ACTUALIZAR EN EL ARRAY ──
-  const editId = window._editingFiesta;
+  const btnGuardar = document.getElementById('btn-guardar-fiesta');
+  const editId = btnGuardar?.dataset.editId ? +btnGuardar.dataset.editId : null;
+  window._editingFiesta = null;
+  if (btnGuardar) btnGuardar.dataset.editId = '';
+
   if (editId) {
     // Editar fiesta existente
     const idx = fiestas.findIndex(f => f.id === editId);
