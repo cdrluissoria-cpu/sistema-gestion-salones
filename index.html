@@ -2226,6 +2226,8 @@ function borrarFiesta(id) {
   renderCtaCte();
   guardarLocal();
 }
+
+function setEstadoManual(id, estado) {
   const f = fiestas.find(x => x.id === id);
   if (!f) return;
   f.estadoManual = estado;
