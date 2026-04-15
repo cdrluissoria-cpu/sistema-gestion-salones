@@ -2234,74 +2234,100 @@ document.querySelector('[onclick="openModal(\'modal-fiesta\')"]')?.addEventListe
 let reciboNum = 1;
 
 function guardarFiesta() {
-  // Leer campos del modal
-  const cliente    = document.querySelector('#modal-fiesta select').value;
-  const tipo       = document.querySelectorAll('#modal-fiesta select')[1].value;
-  const fContrato  = document.querySelectorAll('#modal-fiesta input[type=date]')[0].value;
-  const fEvento    = document.querySelectorAll('#modal-fiesta input[type=date]')[1].value;
-  const hInicio    = document.querySelectorAll('#modal-fiesta input[type=time]')[0].value;
-  const hFin       = document.querySelectorAll('#modal-fiesta input[type=time]')[1].value;
-  const modalidad  = document.querySelectorAll('#modal-fiesta select')[2].value;
-  const obs        = document.querySelector('#modal-fiesta textarea').value;
-  const total      = document.getElementById('tarjeta-total').textContent;
-  const sena       = document.getElementById('sena-result').textContent;
+  const cliente   = document.querySelector('#modal-fiesta select').value;
+  const tipo      = document.querySelectorAll('#modal-fiesta select')[1].value;
+  const fContrato = document.querySelectorAll('#modal-fiesta input[type=date]')[0].value;
+  const fEvento   = document.querySelectorAll('#modal-fiesta input[type=date]')[1].value;
+  const hInicio   = document.querySelectorAll('#modal-fiesta input[type=time]')[0].value;
+  const hFin      = document.querySelectorAll('#modal-fiesta input[type=time]')[1].value;
+  const modalidad = document.querySelectorAll('#modal-fiesta select')[2].value;
+  const obs       = document.querySelector('#modal-fiesta textarea').value;
+  const total     = document.getElementById('tarjeta-total').textContent;
+  const sena      = document.getElementById('sena-result').textContent;
 
-  // Calcular saldo
+  if (!fEvento) {
+    showToast('Ingresá al menos la fecha del evento.', 'warn');
+    return;
+  }
+
   const totalNum = parseMoney(total);
   const senaNum  = parseMoney(sena);
-  const saldoNum = totalNum - senaNum;
 
-  // Número de recibo
-  const numStr = String(reciboNum).padStart(4,'0');
-  reciboNum++;
-
-  // Fecha emisión
-  const hoy = new Date();
-  const fechaEmision = hoy.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-
-  // Poblar recibo
-  document.getElementById('recibo-numero').textContent = 'N° ' + numStr;
-  document.getElementById('r-numero').textContent = 'N° ' + numStr;
-  document.getElementById('r-fecha-emision').textContent = fechaEmision;
-  document.getElementById('r-cliente').textContent   = cliente;
-  document.getElementById('r-tipo').textContent      = tipo;
-  document.getElementById('r-fecha').textContent     = fEvento ? formatDate(fEvento) : '—';
-  document.getElementById('r-horario').textContent   = hInicio && hFin ? hInicio + ' a ' + hFin : hInicio || '—';
-  document.getElementById('r-modalidad').textContent = modalidad;
-  document.getElementById('r-fcontrato').textContent = fContrato ? formatDate(fContrato) : '—';
-  document.getElementById('r-total').textContent     = total;
-  document.getElementById('r-sena').textContent      = sena || '$0';
-  document.getElementById('r-saldo').textContent     = '$' + saldoNum.toLocaleString('es-AR');
-
-  // Tarifas
-  const tarifasEl = document.getElementById('r-tarifas');
-  tarifasEl.innerHTML = '';
+  // Leer tarifas
+  const tarifas = [];
   document.querySelectorAll('[id^="tarjeta-row-"]').forEach(row => {
-    const idNum = row.id.replace('tarjeta-row-','');
     const inputs = row.querySelectorAll('input');
-    const desc = inputs[0].value || 'Tarjeta';
-    const pers = inputs[1].value || '0';
-    const val  = inputs[2].value || '0';
-    const sub  = +pers * +val;
-    tarifasEl.innerHTML += `
-      <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-        <span>${desc} — ${pers} personas × $${(+val).toLocaleString('es-AR')}</span>
-        <span style="font-weight:500;">$${sub.toLocaleString('es-AR')}</span>
-      </div>`;
+    if (inputs.length >= 3) {
+      const desc = inputs[0]?.value || 'Tarjeta';
+      const pers = +(inputs[1]?.value || 0);
+      const val  = +(inputs[2]?.value || 0);
+      tarifas.push({ desc, pers, val });
+    }
   });
 
-  // Observaciones
+  const cli       = clientes.find(c => c.nombre === cliente);
+  const agasajado = cli?.agasNombre || cliente || '—';
+  const invitados = tarifas.reduce((a,t) => a + t.pers, 0) || 0;
+
+  // ── GUARDAR EN EL ARRAY ──
+  const newId = Math.max(0, ...fiestas.map(f => f.id || 0)) + 1;
+  const nuevaFiesta = {
+    id: newId, cliente, tipo, fContrato, fEvento, hInicio, hFin,
+    modalidad, agasajado, invitados, total: totalNum,
+    cobrado: senaNum, estadoManual: null, tarifas, obs
+  };
+  fiestas.push(nuevaFiesta);
+
+  // Registrar seña en ctaCte si hay
+  if (senaNum > 0 && cliente) {
+    if (!ctaCteData[cliente]) {
+      ctaCteData[cliente] = { avatar: initials(cliente), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
+    }
+    const hoy0 = new Date();
+    const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
+    ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: 'Efectivo', importe: senaNum });
+  }
+
+  renderFiestas();
+  renderCal();
+  guardarLocal();
+
+  // Poblar recibo
+  const numStr = String(reciboNum).padStart(4,'0');
+  reciboNum++;
+  const hoyR = new Date();
+  const fechaEmision = hoyR.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  document.getElementById('recibo-numero').textContent = 'N° ' + numStr;
+  document.getElementById('r-numero').textContent      = 'N° ' + numStr;
+  document.getElementById('r-fecha-emision').textContent = fechaEmision;
+  document.getElementById('r-cliente').textContent    = cliente || '—';
+  document.getElementById('r-tipo').textContent       = tipo;
+  document.getElementById('r-fecha').textContent      = fEvento ? formatDate(fEvento) : '—';
+  document.getElementById('r-horario').textContent    = hInicio && hFin ? hInicio+' a '+hFin : hInicio || '—';
+  document.getElementById('r-modalidad').textContent  = modalidad;
+  document.getElementById('r-fcontrato').textContent  = fContrato ? formatDate(fContrato) : '—';
+  document.getElementById('r-total').textContent      = total || '$0';
+  document.getElementById('r-sena').textContent       = sena || '$0';
+  document.getElementById('r-saldo').textContent      = '$' + (totalNum - senaNum).toLocaleString('es-AR');
+
+  const tarifasEl = document.getElementById('r-tarifas');
+  tarifasEl.innerHTML = '';
+  tarifas.forEach(t => {
+    tarifasEl.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
+      <span>${t.desc} — ${t.pers} personas × $${t.val.toLocaleString('es-AR')}</span>
+      <span style="font-weight:500;">$${(t.pers*t.val).toLocaleString('es-AR')}</span></div>`;
+  });
+
   const obsWrap = document.getElementById('r-obs-wrap');
   if (obs) { document.getElementById('r-obs').textContent = obs; obsWrap.style.display = 'block'; }
   else { obsWrap.style.display = 'none'; }
 
   closeModal('modal-fiesta');
-  guardarLocal();
   openModal('modal-recibo');
 }
 
 function parseMoney(str) {
-  // Sacar todo lo que esté entre paréntesis primero, luego quedarse con los dígitos
   return +str.replace(/\(.*?\)/g,'').replace(/[^0-9]/g,'') || 0;
 }
 
