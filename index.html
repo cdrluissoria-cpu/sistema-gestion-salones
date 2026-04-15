@@ -2678,45 +2678,56 @@ function guardarFiesta() {
   window._editingFiesta = null;
   if (btnGuardar) btnGuardar.dataset.editId = '';
 
+  // Variables para el recibo (se asignan dentro del if/else según el modo)
+  let senaNumRecibo  = senaNum;
+  let senaTextRecibo = sena;
+
   if (editId) {
     // Editar fiesta existente
     const idx = fiestas.findIndex(f => f.id === editId);
     if (idx > -1) {
-      // Leer nueva seña del campo editable
-      const nuevaSenaImporte = +document.getElementById('sena-edit-importe')?.value || fiestas[idx].cobrado;
+      const nuevaSenaImporte = +document.getElementById('sena-edit-importe')?.value || 0;
       const nuevaSenaMedio   = document.getElementById('sena-edit-medio')?.value || 'Efectivo';
+      const clienteNombre    = fiestas[idx].cliente || cliente;
+      const hoy0 = new Date();
+      const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
 
-      // Actualizar el movimiento de Seña inicial en ctaCte si existe
-      const clienteNombre = fiestas[idx].cliente;
+      // ── Crear ctaCte si no existe ──
+      if (clienteNombre && !ctaCteData[clienteNombre]) {
+        const cliObj = clientes.find(c => c.nombre === clienteNombre);
+        ctaCteData[clienteNombre] = { avatar: initials(clienteNombre), celular: cliObj?.cel||'', email: cliObj?.email||'', movimientos: [] };
+      }
+
       if (clienteNombre && ctaCteData[clienteNombre]) {
         const movs = ctaCteData[clienteNombre].movimientos;
-        // Buscar el movimiento de seña inicial (último cronológicamente = al fondo del array)
         const idxMov = movs.slice().reverse().findIndex(m =>
           m.concepto === 'Seña inicial' || m.concepto === 'Seña cobrada'
         );
         const realIdx = idxMov !== -1 ? movs.length - 1 - idxMov : -1;
         if (realIdx !== -1) {
+          // Actualizar seña existente
           movs[realIdx].importe = nuevaSenaImporte;
           movs[realIdx].medio   = nuevaSenaMedio;
         } else if (nuevaSenaImporte > 0) {
-          // No había movimiento de seña: crear uno
-          const hoy0 = new Date();
-          const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
+          // Crear movimiento de seña
           movs.push({ fecha: fStr, concepto: 'Seña inicial', medio: nuevaSenaMedio, importe: nuevaSenaImporte });
         }
-        // Recalcular cobrado desde todos los movimientos
         recalcularCobrado(clienteNombre);
-      } else {
-        // Sin ctaCte: cobrado = nueva seña directamente
+      } else if (clienteNombre) {
         fiestas[idx].cobrado = nuevaSenaImporte;
       }
 
+      // Actualizar fiesta con cobrado ya recalculado
       fiestas[idx] = {
         ...fiestas[idx],
         cliente, tipo, fContrato, fEvento, hInicio, hFin,
         modalidad, agasajado, invitados, total: totalNum, tarifas, obs,
-        cobrado: fiestas[idx].cobrado // ya actualizado por recalcularCobrado o arriba
+        cobrado: fiestas[idx].cobrado
       };
+
+      // Para el recibo usar los valores de edición
+      senaNumRecibo  = nuevaSenaImporte;
+      senaTextRecibo = '$' + nuevaSenaImporte.toLocaleString('es-AR');
     }
     window._editingFiesta = null;
   } else {
@@ -2729,12 +2740,11 @@ function guardarFiesta() {
     };
     fiestas.push(nuevaFiesta);
 
-    // Siempre crear entrada en ctaCte para el cliente
+    // Crear ctaCte para el cliente
     if (cliente) {
       if (!ctaCteData[cliente]) {
         ctaCteData[cliente] = { avatar: initials(cliente), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
       }
-      // Registrar seña si hay
       if (senaNum > 0) {
         const hoy0 = new Date();
         const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
@@ -2742,6 +2752,9 @@ function guardarFiesta() {
         ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: medioSena, importe: senaNum });
       }
     }
+
+    senaNumRecibo  = senaNum;
+    senaTextRecibo = sena;
   }
 
   renderFiestas(); renderFiestasProx(); renderFiestasReal();
@@ -2764,8 +2777,8 @@ function guardarFiesta() {
   document.getElementById('r-modalidad').textContent  = modalidad;
   document.getElementById('r-fcontrato').textContent  = fContrato ? formatDate(fContrato) : '—';
   document.getElementById('r-total').textContent      = total || '$0';
-  document.getElementById('r-sena').textContent       = sena || '$0';
-  document.getElementById('r-saldo').textContent      = '$' + (totalNum - senaNum).toLocaleString('es-AR');
+  document.getElementById('r-sena').textContent       = senaTextRecibo || '$0';
+  document.getElementById('r-saldo').textContent      = '$' + Math.max(0, totalNum - senaNumRecibo).toLocaleString('es-AR');
 
   const tarifasEl = document.getElementById('r-tarifas');
   tarifasEl.innerHTML = '';
