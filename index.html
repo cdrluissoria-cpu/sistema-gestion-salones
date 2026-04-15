@@ -2811,21 +2811,22 @@ function exportarBackup() {
   const json     = JSON.stringify(backup, null, 2);
   const filename = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
 
+  // Intentar descarga directa
   try {
-    // Método 1: Blob (PC moderno)
     const blob = new Blob([json], { type: 'application/json' });
     const url  = window.URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href     = url;
-    a.download = filename;
-    a.style.display = 'none';
+    a.href = url; a.download = filename; a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 500);
-  } catch(e) {
-    // Método 2: data URI (mobile fallback)
-    const uri = 'data:application/octet-stream,' + encodeURIComponent(json);
-    window.open(uri, '_blank');
+  } catch(e) {}
+
+  // Abrir también en nueva pestaña como fallback (Ctrl+S para guardar)
+  const win = window.open('', '_blank');
+  if (win) {
+    win.document.write('<pre style="font-family:monospace;white-space:pre-wrap;word-break:break-all;">' + json.replace(/</g,'&lt;') + '</pre>');
+    win.document.title = filename;
   }
 }
 
