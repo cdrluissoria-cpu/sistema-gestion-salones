@@ -1891,7 +1891,7 @@ document.getElementById('modal-conceptos').addEventListener('click', function(e)
 // ── CALENDARIO DINÁMICO ──
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-let calYear = 2025, calMonth = 6;
+let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
 
 function calNav(dir) {
   calMonth += dir;
@@ -2120,7 +2120,8 @@ function getEstado(f) {
 }
 
 function fmtDate(iso) {
-  const [y,m,d] = iso.split('-'); return d+'/'+m;
+  if (!iso || iso === 'undefined' || !iso.includes('-')) return '—';
+  const [y,m,d] = iso.split('-'); return (d||'?')+'/'+(m||'?');
 }
 function fmtMoney(n) {
   return '$' + n.toLocaleString('es-AR');
@@ -2269,27 +2270,45 @@ function guardarFiesta() {
   const agasajado = cli?.agasNombre || cliente || '—';
   const invitados = tarifas.reduce((a,t) => a + t.pers, 0) || 0;
 
-  // ── GUARDAR EN EL ARRAY ──
-  const newId = Math.max(0, ...fiestas.map(f => f.id || 0)) + 1;
-  const nuevaFiesta = {
-    id: newId, cliente, tipo, fContrato, fEvento, hInicio, hFin,
-    modalidad, agasajado, invitados, total: totalNum,
-    cobrado: senaNum, estadoManual: null, tarifas, obs
-  };
-  fiestas.push(nuevaFiesta);
-
-  // Registrar seña en ctaCte si hay
-  if (senaNum > 0 && cliente) {
-    if (!ctaCteData[cliente]) {
-      ctaCteData[cliente] = { avatar: initials(cliente), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
+  // ── GUARDAR O ACTUALIZAR EN EL ARRAY ──
+  const editId = window._editingFiesta;
+  if (editId) {
+    // Editar fiesta existente
+    const idx = fiestas.findIndex(f => f.id === editId);
+    if (idx > -1) {
+      const cobradoAnterior = fiestas[idx].cobrado;
+      fiestas[idx] = {
+        ...fiestas[idx],
+        cliente, tipo, fContrato, fEvento, hInicio, hFin,
+        modalidad, agasajado, invitados, total: totalNum, tarifas, obs,
+        cobrado: cobradoAnterior // preservar cobrado
+      };
     }
-    const hoy0 = new Date();
-    const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
-    ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: 'Efectivo', importe: senaNum });
+    window._editingFiesta = null;
+  } else {
+    // Nueva fiesta
+    const newId = Math.max(0, ...fiestas.map(f => f.id || 0)) + 1;
+    const nuevaFiesta = {
+      id: newId, cliente, tipo, fContrato, fEvento, hInicio, hFin,
+      modalidad, agasajado, invitados, total: totalNum,
+      cobrado: senaNum, estadoManual: null, tarifas, obs
+    };
+    fiestas.push(nuevaFiesta);
+
+    // Registrar seña en ctaCte si hay
+    if (senaNum > 0 && cliente) {
+      if (!ctaCteData[cliente]) {
+        ctaCteData[cliente] = { avatar: initials(cliente), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
+      }
+      const hoy0 = new Date();
+      const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
+      ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: 'Efectivo', importe: senaNum });
+    }
   }
 
   renderFiestas();
   renderCal();
+  renderCtaCte();
   guardarLocal();
 
   // Poblar recibo
