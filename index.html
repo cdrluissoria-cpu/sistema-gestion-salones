@@ -2768,14 +2768,13 @@ function exportarBackup() {
     clientes,
   };
   const json = JSON.stringify(backup, null, 2);
-  const blob = new Blob([json], { type:'application/json' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+  const a = document.createElement('a');
+  a.href = dataUri;
   a.download = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+  document.body.removeChild(a);
 }
 
 function importarBackup(event) {
@@ -2949,35 +2948,43 @@ guardarLocal = function() {
 
 // Detectar estado de autenticación
 if (firebaseOk && auth) {
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      currentUID = user.uid;
-      cargarLocal();
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('sidebar').style.display = 'flex';
-      document.getElementById('main-app').style.display = 'flex';
-      renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
-      const footer = document.querySelector('.sidebar-footer');
-      if (footer && !document.getElementById('btn-logout')) {
-        const btn = document.createElement('button');
-        btn.id = 'btn-logout'; btn.className = 'btn';
-        btn.textContent = '→ Cerrar sesión';
-        btn.style.cssText = 'width:100%;font-size:12px;padding:7px;color:var(--red);border-color:rgba(224,96,96,0.3);';
-        btn.onclick = cerrarSesion;
-        footer.querySelector('div').appendChild(btn);
+  try {
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        currentUID = user.uid;
+        cargarLocal();
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('sidebar').style.display = 'flex';
+        document.getElementById('main-app').style.display = 'flex';
+        renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
+        const footer = document.querySelector('.sidebar-footer');
+        if (footer && !document.getElementById('btn-logout')) {
+          const btn = document.createElement('button');
+          btn.id = 'btn-logout'; btn.className = 'btn';
+          btn.textContent = '→ Cerrar sesión';
+          btn.style.cssText = 'width:100%;font-size:12px;padding:7px;color:var(--red);border-color:rgba(224,96,96,0.3);';
+          btn.onclick = cerrarSesion;
+          footer.querySelector('div').appendChild(btn);
+        }
+        cargarFirestore(user.uid).then(() => {
+          renderFiestas(); renderCal(); renderCtaCte(); renderClientes();
+        }).catch(()=>{});
+      } else {
+        currentUID = null;
+        document.getElementById('login-screen').style.display = 'flex';
+        document.getElementById('sidebar').style.display = 'none';
+        document.getElementById('main-app').style.display = 'none';
       }
-      cargarFirestore(user.uid).then(() => {
-        renderFiestas(); renderCal(); renderCtaCte(); renderClientes();
-      });
-    } else {
-      currentUID = null;
-      document.getElementById('login-screen').style.display = 'flex';
-      document.getElementById('sidebar').style.display = 'none';
-      document.getElementById('main-app').style.display = 'none';
-    }
-  });
+    });
+  } catch(e) {
+    // Firebase auth error — modo local
+    mostrarAppLocal();
+  }
 } else {
-  // Sin Firebase: entrar directo con datos locales
+  mostrarAppLocal();
+}
+
+function mostrarAppLocal() {
   cargarLocal();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sidebar').style.display = 'flex';
