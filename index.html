@@ -10,17 +10,23 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-const firebaseConfig = {
-  apiKey: "AIzaSyAHpN8ktCyvXrRH5BZIaxUZ3NWQohN0J08",
-  authDomain: "gestion-salones-4c945.firebaseapp.com",
-  projectId: "gestion-salones-4c945",
-  storageBucket: "gestion-salones-4c945.firebasestorage.app",
-  messagingSenderId: "51067421547",
-  appId: "1:51067421547:web:7e4e32c5753d1401eb822e"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db   = firebase.firestore();
+let auth = null, db = null, firebaseOk = false;
+try {
+  const firebaseConfig = {
+    apiKey: "AIzaSyAHpN8ktCyvXrRH5BZIaxUZ3NWQohN0J08",
+    authDomain: "gestion-salones-4c945.firebaseapp.com",
+    projectId: "gestion-salones-4c945",
+    storageBucket: "gestion-salones-4c945.firebasestorage.app",
+    messagingSenderId: "51067421547",
+    appId: "1:51067421547:web:7e4e32c5753d1401eb822e"
+  };
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.firestore();
+  firebaseOk = true;
+} catch(e) {
+  console.warn('Firebase no disponible, modo local:', e);
+}
 </script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2800,22 +2806,48 @@ function doAuth() {
   const email = document.getElementById('auth-email').value.trim();
   const pass  = document.getElementById('auth-pass').value;
   const errEl = document.getElementById('auth-error');
+  const btn   = document.getElementById('auth-btn');
   errEl.style.display = 'none';
   if (!email || !pass) { showAuthError('Completá email y contraseña.'); return; }
 
+  if (!firebaseOk || !auth) {
+    showAuthError('Sin conexión a internet. Intentá de nuevo.');
+    return;
+  }
+
+  btn.textContent = 'Cargando...';
+  btn.disabled = true;
+
   if (authTab === 'login') {
     auth.signInWithEmailAndPassword(email, pass)
-      .catch(e => showAuthError(traducirError(e.code)));
+      .catch(e => {
+        btn.textContent = 'Iniciar sesión';
+        btn.disabled = false;
+        showAuthError(traducirError(e.code));
+      });
   } else {
     const salon = document.getElementById('auth-salon').value.trim();
-    if (!salon) { showAuthError('Ingresá el nombre del salón.'); return; }
+    if (!salon) {
+      btn.textContent = 'Crear cuenta';
+      btn.disabled = false;
+      showAuthError('Ingresá el nombre del salón.');
+      return;
+    }
     auth.createUserWithEmailAndPassword(email, pass)
       .then(cred => {
         db.collection('usuarios').doc(cred.user.uid).collection('config').doc('salon')
           .set({ nombre: salon, email, creadoEn: new Date().toISOString() });
       })
-      .catch(e => showAuthError(traducirError(e.code)));
+      .catch(e => {
+        btn.textContent = 'Crear cuenta';
+        btn.disabled = false;
+        showAuthError(traducirError(e.code));
+      });
   }
+}
+
+function cerrarSesion() {
+  if (auth) auth.signOut();
 }
 
 function showAuthError(msg) {
@@ -2887,35 +2919,42 @@ guardarLocal = function() {
 };
 
 // Detectar estado de autenticación
-auth.onAuthStateChanged(async (user) => {
-  if (user) {
-    currentUID = user.uid;
-    // Cargar datos
-    cargarLocal(); // localStorage como cache rápido
-    await cargarFirestore(user.uid); // luego Firestore sobreescribe
-    // Mostrar app
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('sidebar').style.display = 'flex';
-    document.getElementById('main-app').style.display = 'flex';
-    // Agregar botón cerrar sesión al sidebar footer
-    const footer = document.querySelector('.sidebar-footer');
-    if (footer && !document.getElementById('btn-logout')) {
-      const btn = document.createElement('button');
-      btn.id = 'btn-logout';
-      btn.className = 'btn';
-      btn.textContent = '→ Cerrar sesión';
-      btn.style.cssText = 'width:100%;font-size:12px;padding:7px;color:var(--red);border-color:rgba(224,96,96,0.3);';
-      btn.onclick = cerrarSesion;
-      footer.querySelector('div').appendChild(btn);
+if (firebaseOk && auth) {
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      currentUID = user.uid;
+      cargarLocal();
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('sidebar').style.display = 'flex';
+      document.getElementById('main-app').style.display = 'flex';
+      renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
+      const footer = document.querySelector('.sidebar-footer');
+      if (footer && !document.getElementById('btn-logout')) {
+        const btn = document.createElement('button');
+        btn.id = 'btn-logout'; btn.className = 'btn';
+        btn.textContent = '→ Cerrar sesión';
+        btn.style.cssText = 'width:100%;font-size:12px;padding:7px;color:var(--red);border-color:rgba(224,96,96,0.3);';
+        btn.onclick = cerrarSesion;
+        footer.querySelector('div').appendChild(btn);
+      }
+      cargarFirestore(user.uid).then(() => {
+        renderFiestas(); renderCal(); renderCtaCte(); renderClientes();
+      });
+    } else {
+      currentUID = null;
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('sidebar').style.display = 'none';
+      document.getElementById('main-app').style.display = 'none';
     }
-    renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
-  } else {
-    currentUID = null;
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('sidebar').style.display = 'none';
-    document.getElementById('main-app').style.display = 'none';
-  }
-});
+  });
+} else {
+  // Sin Firebase: entrar directo con datos locales
+  cargarLocal();
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('sidebar').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'flex';
+  renderFiestas(); renderCal(); renderConceptoSelect(); initCostLines(); renderClientes();
+}
 
 // Enter en campos de login
 ['auth-email','auth-pass','auth-salon'].forEach(id => {
