@@ -2725,9 +2725,10 @@ function guardarFiesta() {
         cobrado: fiestas[idx].cobrado
       };
 
-      // Para el recibo usar los valores de edición
-      senaNumRecibo  = nuevaSenaImporte;
-      senaTextRecibo = '$' + nuevaSenaImporte.toLocaleString('es-AR');
+      // Para el recibo: usar lo ingresado, o si está vacío, usar el cobrado actual de la fiesta
+      const senaParaRecibo = nuevaSenaImporte > 0 ? nuevaSenaImporte : (fiestas[idx].cobrado || 0);
+      senaNumRecibo  = senaParaRecibo;
+      senaTextRecibo = '$' + senaParaRecibo.toLocaleString('es-AR');
     }
     window._editingFiesta = null;
   } else {
@@ -3851,8 +3852,8 @@ function cargarLocal() {
   try {
     // ── SEED DE DATOS ──
     // Cambiá SEED_ID cada vez que actualices los datos embebidos para forzar recarga.
-    const SEED_ID = 'backup-2026-04-15-v3';
-    const seed = {"fiestas":[{"estadoManual":null,"total":5500000,"fContrato":"2026-04-15","fEvento":"2027-03-30","tipo":"Cumpleaños","tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"hInicio":"22:00","obs":"","hFin":"05:30","cobrado":4625000,"id":1,"modalidad":"Salón con catering","agasajado":"Soria Luis Alfredo","invitados":120,"cliente":"Soria Luis Alfredo"}],"ctaCteData":{},"conceptos":[{"id":1,"nombre":"DJ / Música","clasif":"variable"},{"clasif":"variable","nombre":"Catering","id":2},{"id":3,"clasif":"variable","nombre":"Decoración"},{"id":4,"clasif":"fijo","nombre":"Sueldos"},{"nombre":"Luz y servicios","clasif":"fijo","id":5},{"clasif":"fijo","nombre":"Limpieza","id":6},{"clasif":"estructura","nombre":"Mantenimiento","id":7},{"id":8,"clasif":"estructura","nombre":"Publicidad"},{"id":9,"nombre":"Alquiler","clasif":"estructura"},{"nombre":"Otro","clasif":"estructura","id":10}],"clientes":[{"nombre":"Soria Luis Alfredo","fnac":"1979-03-30","cel":"3863521669","email":"luisorialfredo@hotmail.com","dom":"24 de Septiembre - Monteros","agasNombre":"Soria Luis Alfredo","agasFnac":"1979-03-30","obs":"Prueba"}],"cobros":[],"pagos":[]};
+    const SEED_ID = 'backup-2026-04-15-v4';
+    const seed = {"fiestas":[{"cliente":"Soria Luis Alfredo","hInicio":"22:00","fContrato":"2026-04-15","agasajado":"Soria Luis Alfredo","obs":"","total":5500000,"estadoManual":null,"tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"cobrado":1000000,"fEvento":"2027-03-30","tipo":"Cumpleaños","id":1,"modalidad":"Salón con catering","hFin":"05:30","invitados":120}],"ctaCteData":{"Soria Luis Alfredo":{"movimientos":[{"medio":"Efectivo","importe":1000000,"fecha":"15/04/2026","concepto":"Seña inicial"}],"email":"luisorialfredo@hotmail.com","avatar":"SL","celular":"3863521669"}},"conceptos":[{"nombre":"DJ / Música","clasif":"variable","id":1},{"id":2,"nombre":"Catering","clasif":"variable"},{"nombre":"Decoración","clasif":"variable","id":3},{"clasif":"fijo","nombre":"Sueldos","id":4},{"clasif":"fijo","nombre":"Luz y servicios","id":5},{"id":6,"clasif":"fijo","nombre":"Limpieza"},{"id":7,"nombre":"Mantenimiento","clasif":"estructura"},{"nombre":"Publicidad","clasif":"estructura","id":8},{"nombre":"Alquiler","clasif":"estructura","id":9},{"id":10,"nombre":"Otro","clasif":"estructura"}],"clientes":[{"email":"luisorialfredo@hotmail.com","agasNombre":"Soria Luis Alfredo","nombre":"Soria Luis Alfredo","cel":"3863521669","fnac":"1979-03-30","dom":"24 de Septiembre - Monteros","obs":"Prueba","agasFnac":"1979-03-30"}],"cobros":[],"pagos":[]};
 
     const storedSeedId = localStorage.getItem('es_seed_id');
 
