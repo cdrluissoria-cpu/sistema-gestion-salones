@@ -2564,6 +2564,7 @@ function renderCtaCte() {
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="badge ${est.badge}">${est.label}</span>
             <span style="color:var(--text-muted);font-size:18px;transition:transform .2s;${isOpen?'transform:rotate(90deg)':''}">›</span>
+            <button onclick="event.stopPropagation();borrarCtaCte('${nombre}')" style="background:none;border:1px solid rgba(224,96,96,0.3);border-radius:6px;color:var(--red);font-size:12px;padding:3px 8px;cursor:pointer;">✕</button>
           </div>
         </div>
       </div>
@@ -2582,14 +2583,18 @@ function renderCtaCte() {
         <div style="height:1px;background:var(--border);margin-bottom:14px;"></div>
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:10px;">Movimientos de cobro</div>
         <table class="data-table" style="margin-bottom:16px;">
-          <thead><tr><th>Fecha</th><th>Concepto</th><th>Medio</th><th style="text-align:right;">Importe</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Medio</th><th style="text-align:right;">Importe</th><th></th></tr></thead>
           <tbody>
-            ${data.movimientos.map(m => `
+            ${data.movimientos.map((m, idx) => `
               <tr>
                 <td class="muted">${m.fecha}</td>
                 <td>${m.concepto}</td>
                 <td class="muted">${m.medio}</td>
                 <td style="text-align:right;color:var(--green);font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;">+$${m.importe.toLocaleString('es-AR')}</td>
+                <td style="white-space:nowrap;text-align:right;">
+                  <button class="btn" style="padding:3px 8px;font-size:11px;" onclick="editarMovimiento('${nombre}',${idx})">✎</button>
+                  <button class="btn" style="padding:3px 8px;font-size:11px;color:var(--red);border-color:rgba(224,96,96,0.3);margin-left:3px;" onclick="borrarMovimiento('${nombre}',${idx})">✕</button>
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -2619,6 +2624,45 @@ function renderCtaCte() {
 function toggleCtaCte(nombre) {
   ctaCteAbierta = ctaCteAbierta === nombre ? null : nombre;
   renderCtaCte();
+}
+
+function borrarCtaCte(nombre) {
+  if (!confirm(`¿Borrar la cuenta corriente de ${nombre}? Se eliminan todos los movimientos.`)) return;
+  delete ctaCteData[nombre];
+  if (ctaCteAbierta === nombre) ctaCteAbierta = null;
+  renderCtaCte();
+  guardarLocal();
+}
+
+function borrarMovimiento(nombre, idx) {
+  if (!confirm('¿Borrar este movimiento?')) return;
+  const data = ctaCteData[nombre];
+  if (!data) return;
+  const mov = data.movimientos[idx];
+  // Restar del cobrado en la fiesta correspondiente
+  const f = fiestas.find(x => x.cliente === nombre && x.estadoManual !== 'can');
+  if (f && mov.importe) f.cobrado = Math.max(0, f.cobrado - mov.importe);
+  data.movimientos.splice(idx, 1);
+  renderCtaCte();
+  renderFiestas();
+  guardarLocal();
+}
+
+function editarMovimiento(nombre, idx) {
+  const data = ctaCteData[nombre];
+  if (!data) return;
+  const mov = data.movimientos[idx];
+  const nuevoImporte = prompt('Nuevo importe:', mov.importe);
+  if (nuevoImporte === null) return;
+  const nuevo = parseFloat(nuevoImporte.replace(/\./g,'').replace(',','.'));
+  if (isNaN(nuevo) || nuevo <= 0) { alert('Importe inválido'); return; }
+  // Ajustar cobrado en fiesta
+  const f = fiestas.find(x => x.cliente === nombre && x.estadoManual !== 'can');
+  if (f) f.cobrado = Math.max(0, Math.min(f.total, f.cobrado - mov.importe + nuevo));
+  mov.importe = nuevo;
+  renderCtaCte();
+  renderFiestas();
+  guardarLocal();
 }
 
 function registrarCobroInline(nombre) {
@@ -2762,19 +2806,27 @@ function exportarBackup() {
   const backup = {
     version: 1,
     fecha: new Date().toISOString(),
-    fiestas,
-    ctaCteData,
-    conceptos,
-    clientes,
+    fiestas, ctaCteData, conceptos, clientes,
   };
-  const json = JSON.stringify(backup, null, 2);
-  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
-  const a = document.createElement('a');
-  a.href = dataUri;
-  a.download = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const json     = JSON.stringify(backup, null, 2);
+  const filename = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
+
+  try {
+    // Método 1: Blob (PC moderno)
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = window.URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 500);
+  } catch(e) {
+    // Método 2: data URI (mobile fallback)
+    const uri = 'data:application/octet-stream,' + encodeURIComponent(json);
+    window.open(uri, '_blank');
+  }
 }
 
 function importarBackup(event) {
