@@ -25,7 +25,7 @@ try {
   db   = firebase.firestore();
   firebaseOk = true;
 } catch(e) {
-  console.warn('Firebase no disponible, modo local:', e);
+  // Firebase no disponible, modo local
 }
 </script>
 <style>
@@ -1531,21 +1531,23 @@ select.form-input option { background: var(--surface2); }
     <div class="form-grid">
       <div class="form-group">
         <div class="form-label">Fecha</div>
-        <input class="form-input" type="date">
+        <input class="form-input" type="date" id="cobro-fecha">
       </div>
       <div class="form-group">
         <div class="form-label">Importe ($)</div>
-        <input class="form-input" type="number" placeholder="0">
+        <input class="form-input" id="cobro-importe" type="text" inputmode="numeric" placeholder="0"
+          oninput="this.value=formatImporte(this.value)"
+          style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:var(--green);">
       </div>
       <div class="form-group">
         <div class="form-label">Vinculado a fiesta</div>
         <select class="form-input" id="cobro-fiesta-sel">
-          <option value="">Seleccionar fiesta...</option>
+          <option value="">Sin vincular</option>
         </select>
       </div>
       <div class="form-group">
         <div class="form-label">Medio de cobro</div>
-        <select class="form-input">
+        <select class="form-input" id="cobro-medio">
           <option>Efectivo</option>
           <option>Transferencia</option>
           <option>Cheque</option>
@@ -1553,13 +1555,13 @@ select.form-input option { background: var(--surface2); }
         </select>
       </div>
       <div class="form-group full">
-        <div class="form-label">Observación</div>
-        <input class="form-input" placeholder="Ej: Seña inicial, pago parcial, por roturas, etc.">
+        <div class="form-label">Concepto / Observación</div>
+        <input class="form-input" id="cobro-obs" placeholder="Ej: Seña inicial, pago parcial...">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-cobro')">Cancelar</button>
-      <button class="btn btn-primary" onclick="closeModal('modal-cobro')">Guardar cobro</button>
+      <button class="btn btn-primary" onclick="guardarCobro()">Guardar cobro</button>
     </div>
   </div>
 </div>
@@ -1571,7 +1573,7 @@ select.form-input option { background: var(--surface2); }
     <div class="form-grid">
       <div class="form-group">
         <div class="form-label">Fecha</div>
-        <input class="form-input" type="date">
+        <input class="form-input" type="date" id="pago-fecha">
       </div>
       <div class="form-group">
         <div class="form-label">Importe ($)</div>
@@ -1587,7 +1589,7 @@ select.form-input option { background: var(--surface2); }
       </div>
       <div class="form-group">
         <div class="form-label">Medio de pago</div>
-        <select class="form-input">
+        <select class="form-input" id="pago-medio">
           <option>Efectivo</option>
           <option>Transferencia</option>
           <option>Cheque</option>
@@ -1606,12 +1608,12 @@ select.form-input option { background: var(--surface2); }
       </div>
       <div class="form-group full">
         <div class="form-label">Observación</div>
-        <input class="form-input" placeholder="Descripción del gasto...">
+        <input class="form-input" id="pago-obs" placeholder="Descripción del gasto...">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-pago')">Cancelar</button>
-      <button class="btn btn-primary" onclick="closeModal('modal-pago')">Guardar pago</button>
+      <button class="btn btn-primary" onclick="guardarPago()">Guardar pago</button>
     </div>
   </div>
 </div>
@@ -2116,6 +2118,8 @@ function calcTarget() {
 
 // ── FIESTAS DATA + ESTADO AUTOMÁTICO ──
 const fiestas = [];
+const cobros  = []; // { id, fecha, importe, fiestaId, medio, obs, tipo }
+const pagos   = []; // { id, fecha, importe, concepto, clasif, medio, fiestaId, obs }
 
 function getEstado(f) {
   if (f.estadoManual === 'can')  return { label:'Cancelado',   badge:'badge-can'  };
@@ -2322,14 +2326,18 @@ function guardarFiesta() {
     };
     fiestas.push(nuevaFiesta);
 
-    // Registrar seña en ctaCte si hay
-    if (senaNum > 0 && cliente) {
+    // Siempre crear entrada en ctaCte para el cliente
+    if (cliente) {
       if (!ctaCteData[cliente]) {
         ctaCteData[cliente] = { avatar: initials(cliente), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
       }
-      const hoy0 = new Date();
-      const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
-      ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: 'Efectivo', importe: senaNum });
+      // Registrar seña si hay
+      if (senaNum > 0) {
+        const hoy0 = new Date();
+        const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
+        const medioSena = document.getElementById('sena-medio')?.value || 'Efectivo';
+        ctaCteData[cliente].movimientos.unshift({ fecha: fStr, concepto: 'Seña inicial', medio: medioSena, importe: senaNum });
+      }
     }
   }
 
@@ -2524,13 +2532,10 @@ function renderCtaCte() {
   container.innerHTML = '';
 
   Object.entries(ctaCteData).forEach(([nombre, data]) => {
-    // Buscar la fiesta de este cliente en el array central
-    const f = fiestas.find(x => x.cliente === nombre);
-    if (!f) return;
-
-    const est     = getEstado(f);
-    const saldo   = f.total - f.cobrado;
-    const pct     = Math.round(f.cobrado / f.total * 100);
+    const f       = fiestas.find(x => x.cliente === nombre && x.estadoManual !== 'can');
+    const est     = f ? getEstado(f) : { label: '—', badge: '' };
+    const saldo   = f ? (f.total - f.cobrado) : 0;
+    const pct     = f && f.total > 0 ? Math.round(f.cobrado / f.total * 100) : 0;
     const isOpen  = ctaCteAbierta === nombre;
     const key     = nombre.replace(/\s/g,'_');
 
@@ -2549,8 +2554,8 @@ function renderCtaCte() {
         <div style="display:flex;align-items:center;gap:20px;flex-shrink:0;">
           <div style="text-align:right;">
             <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Evento</div>
-            <div style="font-size:13px;font-weight:500;">${f.agasajado}</div>
-            <div style="font-size:12px;color:var(--text-muted);">${f.tipo} · ${fmtDate(f.fEvento)}/2025</div>
+            <div style="font-size:13px;font-weight:500;">${f ? f.agasajado : '—'}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${f ? f.tipo + ' · ' + fmtDate(f.fEvento) : 'Sin fiesta asignada'}</div>
           </div>
           <div style="text-align:right;min-width:90px;">
             <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Saldo</div>
@@ -2565,7 +2570,7 @@ function renderCtaCte() {
 
       <div style="margin-top:12px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
-          <span>Cobrado: $${f.cobrado.toLocaleString('es-AR')} de $${f.total.toLocaleString('es-AR')}</span>
+          <span>Cobrado: $${f ? f.cobrado.toLocaleString('es-AR') : '0'} de $${f ? f.total.toLocaleString('es-AR') : '0'}</span>
           <span>${pct}%</span>
         </div>
         <div style="height:4px;background:var(--surface3);border-radius:10px;overflow:hidden;">
@@ -2618,21 +2623,41 @@ function toggleCtaCte(nombre) {
 
 function registrarCobroInline(nombre) {
   const key     = nombre.replace(/\s/g,'_');
-  const importe = +document.getElementById('cobro-imp-' + key).value;
+  const impEl   = document.getElementById('cobro-imp-' + key);
+  const medEl   = document.getElementById('cobro-med-' + key);
+  const importe = parseFloat((impEl?.value||'').replace(/\./g,'').replace(',','.')) || 0;
   if (!importe || importe <= 0) {
-    const el = document.getElementById('cobro-imp-' + key);
-    el.style.borderColor = 'var(--red)';
-    setTimeout(() => el.style.borderColor = '', 1200);
+    if (impEl) { impEl.style.borderColor = 'var(--red)'; setTimeout(() => impEl.style.borderColor = '', 1200); }
     return;
   }
-  const medio = document.getElementById('cobro-med-' + key).value;
-  // Actualizar cobrado en array central
-  const f = fiestas.find(x => x.cliente === nombre);
-  if (f) f.cobrado = Math.min(f.cobrado + importe, f.total);
+  const medio = medEl?.value || 'Efectivo';
+
+  // Actualizar cobrado en la fiesta con mayor saldo pendiente
+  const fiestasPendientes = fiestas.filter(x => x.cliente === nombre && x.estadoManual !== 'can');
+  fiestasPendientes.sort((a,b) => (b.total - b.cobrado) - (a.total - a.cobrado));
+  let restante = importe;
+  fiestasPendientes.forEach(f => {
+    if (restante <= 0) return;
+    const saldo = f.total - f.cobrado;
+    const aAplicar = Math.min(saldo, restante);
+    f.cobrado = Math.round(f.cobrado + aAplicar);
+    restante -= aAplicar;
+  });
+
+  // Asegurar que ctaCteData existe
+  if (!ctaCteData[nombre]) {
+    const cli = clientes.find(c => c.nombre === nombre);
+    ctaCteData[nombre] = { avatar: initials(nombre), celular: cli?.cel||'', email: cli?.email||'', movimientos: [] };
+  }
+
   // Agregar movimiento
   const hoy = new Date();
-  const fechaStr = hoy.getDate().toString().padStart(2,'0') + '/' + (hoy.getMonth()+1).toString().padStart(2,'0') + '/' + hoy.getFullYear();
+  const fechaStr = hoy.getDate().toString().padStart(2,'0')+'/'+(hoy.getMonth()+1).toString().padStart(2,'0')+'/'+hoy.getFullYear();
   ctaCteData[nombre].movimientos.unshift({ fecha: fechaStr, concepto: 'Cobro registrado', medio, importe });
+
+  // Limpiar campo
+  if (impEl) impEl.value = '';
+
   renderCtaCte();
   renderFiestas();
   guardarLocal();
@@ -2742,13 +2767,15 @@ function exportarBackup() {
     conceptos,
     clientes,
   };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type:'application/json' });
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type:'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = 'backup-elitesalones-' + new Date().toISOString().slice(0,10) + '.json';
+  a.download = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
 function importarBackup(event) {
