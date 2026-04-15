@@ -1361,31 +1361,64 @@ select.form-input option { background: var(--surface2); }
 
     <!-- Seña -->
     <div style="height:1px;background:var(--border);margin:18px 0;"></div>
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:12px;">Seña cobrada</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end;">
-      <div>
-        <div class="form-label" style="margin-bottom:4px;">Porcentaje (%)</div>
-        <input class="form-input" id="sena-pct" type="number" min="0" max="100" placeholder="Ej: 30"
-          oninput="this.value&&(document.getElementById('sena-val').value='');calcSena('pct')">
+
+    <!-- Modo NUEVA fiesta: ingresar seña -->
+    <div id="sena-nueva-wrap">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:12px;">Seña cobrada</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end;">
+        <div>
+          <div class="form-label" style="margin-bottom:4px;">Porcentaje (%)</div>
+          <input class="form-input" id="sena-pct" type="number" min="0" max="100" placeholder="Ej: 30"
+            oninput="this.value&&(document.getElementById('sena-val').value='');calcSena('pct')">
+        </div>
+        <div>
+          <div class="form-label" style="margin-bottom:4px;">Importe fijo ($)</div>
+          <input class="form-input" id="sena-val" type="number" min="0" placeholder="Ej: 50.000"
+            oninput="this.value&&(document.getElementById('sena-pct').value='');calcSena('val')">
+        </div>
+        <div>
+          <div class="form-label" style="margin-bottom:4px;">Medio de cobro</div>
+          <select class="form-input" id="sena-medio">
+            <option>Efectivo</option>
+            <option>Transferencia</option>
+            <option>Cheque</option>
+            <option>Tarjeta</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <div class="form-label" style="margin-bottom:4px;">Importe fijo ($)</div>
-        <input class="form-input" id="sena-val" type="number" min="0" placeholder="Ej: 50.000"
-          oninput="this.value&&(document.getElementById('sena-pct').value='');calcSena('val')">
-      </div>
-      <div>
-        <div class="form-label" style="margin-bottom:4px;">Medio de cobro</div>
-        <select class="form-input" id="sena-medio">
-          <option>Efectivo</option>
-          <option>Transferencia</option>
-          <option>Cheque</option>
-          <option>Tarjeta</option>
-        </select>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-top:10px;">
+        <div style="font-size:13px;color:var(--text-muted);">Seña a cobrar</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--amber);" id="sena-result">$0</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;margin-top:10px;">
-      <div style="font-size:13px;color:var(--text-muted);">Seña a cobrar</div>
-      <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--amber);" id="sena-result">$0</div>
+
+    <!-- Modo EDITAR fiesta: mostrar cobrado actual (solo info) -->
+    <div id="sena-edit-wrap" style="display:none;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:12px;">Seña inicial cobrada</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end;margin-bottom:10px;">
+        <div>
+          <div class="form-label" style="margin-bottom:4px;">Importe seña ($)</div>
+          <input class="form-input" id="sena-edit-importe" type="number" min="0" placeholder="0"
+            oninput="actualizarSenaEdit()"
+            style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:var(--amber);">
+        </div>
+        <div>
+          <div class="form-label" style="margin-bottom:4px;">Medio de cobro</div>
+          <select class="form-input" id="sena-edit-medio">
+            <option>Efectivo</option>
+            <option>Transferencia</option>
+            <option>Cheque</option>
+            <option>Tarjeta</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 16px;">
+        <div style="font-size:13px;color:var(--text-muted);">Saldo pendiente tras esta seña</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:var(--amber);" id="sena-edit-saldo">$0</div>
+      </div>
+      <div style="background:var(--blue-bg);border:1px solid rgba(110,158,197,0.2);border-radius:8px;padding:9px 14px;margin-top:10px;font-size:12px;color:var(--blue);">
+        ℹ Los cobros posteriores a la seña se registran desde <strong>Cuenta Corriente</strong>.
+      </div>
     </div>
 
     <div style="height:1px;background:var(--border);margin:18px 0;"></div>
@@ -2272,20 +2305,54 @@ function editFiesta(id) {
   const modal = document.getElementById('modal-fiesta');
   modal.querySelector('.modal-title').textContent = 'Editar fiesta';
 
+  // ── Selects ──
   const selects = modal.querySelectorAll('select');
-  [...selects[0].options].forEach(o => { if(o.text===f.cliente) selects[0].value=o.value; });
-  [...selects[1].options].forEach(o => { if(o.text===f.tipo)    selects[1].value=o.value; });
+  [...selects[0].options].forEach(o => { if(o.text===f.cliente)   selects[0].value=o.value; });
+  [...selects[1].options].forEach(o => { if(o.text===f.tipo)      selects[1].value=o.value; });
   [...selects[2].options].forEach(o => { if(o.text===f.modalidad) selects[2].value=o.value; });
 
-  modal.querySelectorAll('input[type=date]')[0].value = f.fContrato;
-  modal.querySelectorAll('input[type=date]')[1].value = f.fEvento;
-  modal.querySelectorAll('input[type=time]')[0].value = f.hInicio;
-  modal.querySelectorAll('input[type=time]')[1].value = f.hFin;
+  // ── Fechas y horarios ──
+  modal.querySelectorAll('input[type=date]')[0].value = f.fContrato || '';
+  modal.querySelectorAll('input[type=date]')[1].value = f.fEvento   || '';
+  modal.querySelectorAll('input[type=time]')[0].value = f.hInicio   || '';
+  modal.querySelectorAll('input[type=time]')[1].value = f.hFin      || '';
 
-  // Botones manuales en el footer
+  // ── Tarifas / Tarjetas ──
+  const container = document.getElementById('tarjeta-lines');
+  container.innerHTML = '';
+  tarjetaCount = 0;
+  if (f.tarifas && f.tarifas.length) {
+    f.tarifas.forEach(t => addTarjeta(t.desc, t.pers, t.val));
+  } else {
+    addTarjeta();
+  }
+
+  // ── Observaciones ──
+  const obs = modal.querySelector('textarea');
+  if (obs) obs.value = f.obs || '';
+
+  // ── Seña editable: mostrar seña inicial (primer movimiento del cliente) ──
+  document.getElementById('sena-nueva-wrap').style.display = 'none';
+  document.getElementById('sena-edit-wrap').style.display  = 'block';
+  // Buscar seña inicial en ctaCte (primer movimiento, el de la seña)
+  const ctaCliente = ctaCteData[f.cliente];
+  const movSena = ctaCliente?.movimientos?.slice().reverse().find(m =>
+    m.concepto === 'Seña inicial' || m.concepto === 'Seña cobrada'
+  );
+  const senaActual = movSena ? movSena.importe : (f.cobrado || 0);
+  document.getElementById('sena-edit-importe').value = senaActual || '';
+  if (movSena?.medio) {
+    const selMed = document.getElementById('sena-edit-medio');
+    [...selMed.options].forEach(o => { if(o.value === movSena.medio) selMed.value = movSena.medio; });
+  }
+  document.getElementById('sena-edit-saldo').textContent =
+    '$' + Math.max(0, (f.total||0) - (senaActual||0)).toLocaleString('es-AR');
+  document.getElementById('sena-pct').value = '';
+  document.getElementById('sena-val').value = '';
+
+  // ── Botones estado en footer ──
   const footer = modal.querySelector('.modal-footer');
 
-  // Botón Cancelar/Reactivar
   let btnCan = document.getElementById('btn-cancelar-fiesta');
   if (!btnCan) {
     btnCan = document.createElement('button');
@@ -2294,7 +2361,6 @@ function editFiesta(id) {
     btnCan.style.cssText = 'color:var(--red);border-color:rgba(224,96,96,0.3);';
     footer.prepend(btnCan);
   }
-  // Botón Realizado
   let btnReal = document.getElementById('btn-realizado-fiesta');
   if (!btnReal) {
     btnReal = document.createElement('button');
@@ -2556,6 +2622,8 @@ document.querySelector('[onclick="openModal(\'modal-fiesta\')"]')?.addEventListe
   document.getElementById('sena-pct').value = '';
   document.getElementById('sena-val').value = '';
   document.getElementById('sena-result').textContent = '$0';
+  document.getElementById('sena-nueva-wrap').style.display = 'block';
+  document.getElementById('sena-edit-wrap').style.display  = 'none';
   document.getElementById('tarjeta-lines').innerHTML = '';
   tarjetaCount = 0;
   addTarjeta();
@@ -2614,12 +2682,40 @@ function guardarFiesta() {
     // Editar fiesta existente
     const idx = fiestas.findIndex(f => f.id === editId);
     if (idx > -1) {
-      const cobradoAnterior = fiestas[idx].cobrado;
+      // Leer nueva seña del campo editable
+      const nuevaSenaImporte = +document.getElementById('sena-edit-importe')?.value || fiestas[idx].cobrado;
+      const nuevaSenaMedio   = document.getElementById('sena-edit-medio')?.value || 'Efectivo';
+
+      // Actualizar el movimiento de Seña inicial en ctaCte si existe
+      const clienteNombre = fiestas[idx].cliente;
+      if (clienteNombre && ctaCteData[clienteNombre]) {
+        const movs = ctaCteData[clienteNombre].movimientos;
+        // Buscar el movimiento de seña inicial (último cronológicamente = al fondo del array)
+        const idxMov = movs.slice().reverse().findIndex(m =>
+          m.concepto === 'Seña inicial' || m.concepto === 'Seña cobrada'
+        );
+        const realIdx = idxMov !== -1 ? movs.length - 1 - idxMov : -1;
+        if (realIdx !== -1) {
+          movs[realIdx].importe = nuevaSenaImporte;
+          movs[realIdx].medio   = nuevaSenaMedio;
+        } else if (nuevaSenaImporte > 0) {
+          // No había movimiento de seña: crear uno
+          const hoy0 = new Date();
+          const fStr = hoy0.getDate().toString().padStart(2,'0')+'/'+(hoy0.getMonth()+1).toString().padStart(2,'0')+'/'+hoy0.getFullYear();
+          movs.push({ fecha: fStr, concepto: 'Seña inicial', medio: nuevaSenaMedio, importe: nuevaSenaImporte });
+        }
+        // Recalcular cobrado desde todos los movimientos
+        recalcularCobrado(clienteNombre);
+      } else {
+        // Sin ctaCte: cobrado = nueva seña directamente
+        fiestas[idx].cobrado = nuevaSenaImporte;
+      }
+
       fiestas[idx] = {
         ...fiestas[idx],
         cliente, tipo, fContrato, fEvento, hInicio, hFin,
         modalidad, agasajado, invitados, total: totalNum, tarifas, obs,
-        cobrado: cobradoAnterior // preservar cobrado
+        cobrado: fiestas[idx].cobrado // ya actualizado por recalcularCobrado o arriba
       };
     }
     window._editingFiesta = null;
@@ -2817,6 +2913,20 @@ function calcSena(from) {
   }
 }
 
+function actualizarSenaEdit() {
+  const editId = +document.getElementById('btn-guardar-fiesta')?.dataset.editId || null;
+  if (!editId) return;
+  const f = fiestas.find(x => x.id === editId);
+  if (!f) return;
+  const nuevaSena = +document.getElementById('sena-edit-importe')?.value || 0;
+  const saldo = Math.max(0, (f.total||0) - nuevaSena);
+  const el = document.getElementById('sena-edit-saldo');
+  if (el) {
+    el.textContent = '$' + saldo.toLocaleString('es-AR');
+    el.style.color = saldo === 0 ? 'var(--green)' : 'var(--amber)';
+  }
+}
+
 // Init: open modal with one default line
 document.getElementById('modal-fiesta').addEventListener('click', function(e){
   if(e.target === this && document.getElementById('tarjeta-lines').children.length === 0) addTarjeta();
@@ -2942,7 +3052,12 @@ function toggleCtaCte(nombre) {
 }
 
 function borrarCtaCte(nombre) {
-  if (!confirm(`¿Borrar la cuenta corriente de ${nombre}? Se eliminan todos los movimientos.`)) return;
+  const fiestasActivas = fiestas.filter(f => f.cliente === nombre && f.estadoManual !== 'can');
+  if (fiestasActivas.length > 0) {
+    alert(`No se puede eliminar la cuenta corriente de "${nombre}" porque tiene ${fiestasActivas.length} fiesta${fiestasActivas.length > 1 ? 's' : ''} activa${fiestasActivas.length > 1 ? 's' : ''}.\n\nPrimero cancelá o eliminá la${fiestasActivas.length > 1 ? 's fiestas' : ' fiesta'} asociada${fiestasActivas.length > 1 ? 's' : ''}.`);
+    return;
+  }
+  if (!confirm(`¿Borrar la cuenta corriente de "${nombre}"? Se eliminan todos los movimientos.`)) return;
   delete ctaCteData[nombre];
   if (ctaCteAbierta === nombre) ctaCteAbierta = null;
   renderCtaCte();
@@ -3723,8 +3838,8 @@ function cargarLocal() {
   try {
     // ── SEED DE DATOS ──
     // Cambiá SEED_ID cada vez que actualices los datos embebidos para forzar recarga.
-    const SEED_ID = 'backup-2026-04-15-v2';
-    const seed = {"fiestas":[{"estadoManual":null,"total":5500000,"fContrato":"2026-04-15","fEvento":"2027-03-30","tipo":"Cumpleaños","tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"hInicio":"22:00","obs":"","hFin":"05:30","cobrado":4625000,"id":1,"modalidad":"Salón con catering","agasajado":"Soria Luis Alfredo","invitados":120,"cliente":"Soria Luis Alfredo"}],"ctaCteData":{"Soria Luis Alfredo":{"celular":"3863521669","movimientos":[{"importe":4625000,"medio":"Efectivo","fecha":"14/04/2026","concepto":"Cobro registrado"}],"avatar":"SL","email":"luisorialfredo@hotmail.com"}},"conceptos":[{"id":1,"nombre":"DJ / Música","clasif":"variable"},{"clasif":"variable","nombre":"Catering","id":2},{"id":3,"clasif":"variable","nombre":"Decoración"},{"id":4,"clasif":"fijo","nombre":"Sueldos"},{"nombre":"Luz y servicios","clasif":"fijo","id":5},{"clasif":"fijo","nombre":"Limpieza","id":6},{"clasif":"estructura","nombre":"Mantenimiento","id":7},{"id":8,"clasif":"estructura","nombre":"Publicidad"},{"id":9,"nombre":"Alquiler","clasif":"estructura"},{"nombre":"Otro","clasif":"estructura","id":10}],"clientes":[{"nombre":"Soria Luis Alfredo","fnac":"1979-03-30","cel":"3863521669","email":"luisorialfredo@hotmail.com","dom":"24 de Septiembre - Monteros","agasNombre":"Soria Luis Alfredo","agasFnac":"1979-03-30","obs":"Prueba"}],"cobros":[],"pagos":[]};
+    const SEED_ID = 'backup-2026-04-15-v3';
+    const seed = {"fiestas":[{"estadoManual":null,"total":5500000,"fContrato":"2026-04-15","fEvento":"2027-03-30","tipo":"Cumpleaños","tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"hInicio":"22:00","obs":"","hFin":"05:30","cobrado":4625000,"id":1,"modalidad":"Salón con catering","agasajado":"Soria Luis Alfredo","invitados":120,"cliente":"Soria Luis Alfredo"}],"ctaCteData":{},"conceptos":[{"id":1,"nombre":"DJ / Música","clasif":"variable"},{"clasif":"variable","nombre":"Catering","id":2},{"id":3,"clasif":"variable","nombre":"Decoración"},{"id":4,"clasif":"fijo","nombre":"Sueldos"},{"nombre":"Luz y servicios","clasif":"fijo","id":5},{"clasif":"fijo","nombre":"Limpieza","id":6},{"clasif":"estructura","nombre":"Mantenimiento","id":7},{"id":8,"clasif":"estructura","nombre":"Publicidad"},{"id":9,"nombre":"Alquiler","clasif":"estructura"},{"nombre":"Otro","clasif":"estructura","id":10}],"clientes":[{"nombre":"Soria Luis Alfredo","fnac":"1979-03-30","cel":"3863521669","email":"luisorialfredo@hotmail.com","dom":"24 de Septiembre - Monteros","agasNombre":"Soria Luis Alfredo","agasFnac":"1979-03-30","obs":"Prueba"}],"cobros":[],"pagos":[]};
 
     const storedSeedId = localStorage.getItem('es_seed_id');
 
