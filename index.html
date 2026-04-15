@@ -826,6 +826,16 @@ select.form-input option { background: var(--surface2); }
       <div class="page-title" id="page-title">Inicio</div>
     </div>
     <div class="topbar-actions">
+      <!-- Indicador Firebase -->
+      <div id="fb-status" title="Estado Firebase" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);cursor:default;user-select:none;">
+        <span id="fb-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0;transition:background .4s;"></span>
+        <span id="fb-label">Conectando…</span>
+      </div>
+      <!-- Botón guardar Firebase -->
+      <button id="btn-push-firebase" class="btn" onclick="pushFirebase()" title="Guardar todos los datos en Firebase"
+        style="display:none;font-size:12px;padding:6px 13px;color:var(--green);border-color:rgba(76,175,130,0.35);">
+        ☁ Guardar en Firebase
+      </button>
       <button class="btn btn-primary" onclick="openModal('modal-fiesta')">+ Nueva fiesta</button>
     </div>
   </header>
@@ -2448,11 +2458,16 @@ function renderDashboard() {
         const fe   = new Date(f.fEvento+'T00:00:00');
         const dia  = fe.getDate();
         const mon  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][fe.getMonth()];
+        const hoyD = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        const dias = Math.round((fe - hoyD) / 86400000);
         return `<div class="event-item">
           <div class="event-date-box"><div class="event-date-day">${dia}</div><div class="event-date-mon">${mon}</div></div>
           <div class="event-info">
             <div class="event-name">${f.tipo} de ${f.agasajado}</div>
             <div class="event-detail">Cliente: ${f.cliente||'—'} · ${f.invitados} invitados</div>
+            <div style="font-size:11px;margin-top:3px;${dias===0?'color:var(--gold);font-weight:500;':dias<=7?'color:var(--red);':dias<=30?'color:var(--amber);':'color:var(--text-dim);'}">
+              ${dias===0 ? '🎉 ¡Es hoy!' : dias===1 ? '⚡ Mañana' : `📅 Faltan ${dias} días`}
+            </div>
           </div>
           <div class="event-right" style="text-align:right;">
             <span class="badge ${est.badge}">${est.label}</span>
@@ -3295,6 +3310,7 @@ guardarLocal = function() {
 // Detectar estado de autenticación
 if (DEV_MODE) {
   // Modo desarrollo: entrar directo sin login
+  setFbStatus('local');
   cargarLocal();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sidebar').style.display = 'flex';
@@ -3307,6 +3323,7 @@ if (DEV_MODE) {
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         currentUID = user.uid;
+        setFbStatus('conectado');
         cargarLocal();
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
@@ -3332,6 +3349,7 @@ if (DEV_MODE) {
         }).catch(()=>{});
       } else {
         currentUID = null;
+        setFbStatus('desconectado');
         document.getElementById('login-screen').style.display = 'flex';
         document.getElementById('sidebar').style.display = 'none';
         document.getElementById('main-app').style.display = 'none';
@@ -3346,6 +3364,7 @@ if (DEV_MODE) {
 }
 
 function mostrarAppLocal() {
+  setFbStatus('local');
   cargarLocal();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sidebar').style.display = 'flex';
@@ -3702,20 +3721,118 @@ function guardarLocal() {
 
 function cargarLocal() {
   try {
-    const f  = localStorage.getItem('es_fiestas');
-    const cl = localStorage.getItem('es_clientes');
-    const cc = localStorage.getItem('es_ctacte');
-    const co = localStorage.getItem('es_conceptos');
-    const cb = localStorage.getItem('es_cobros');
-    const pg = localStorage.getItem('es_pagos');
-    if (f)  { const d=JSON.parse(f);  fiestas.length=0;  d.forEach(x=>fiestas.push(x)); }
-    if (cl) { const d=JSON.parse(cl); clientes.length=0; d.forEach(x=>clientes.push(x)); }
-    if (cc) { const d=JSON.parse(cc); Object.keys(ctaCteData).forEach(k=>delete ctaCteData[k]); Object.assign(ctaCteData, d); }
-    if (co) { const d=JSON.parse(co); conceptos.length=0; d.forEach(x=>conceptos.push(x)); }
-    if (cb) { const d=JSON.parse(cb); cobros.length=0;  d.forEach(x=>cobros.push(x)); }
-    if (pg) { const d=JSON.parse(pg); pagos.length=0;   d.forEach(x=>pagos.push(x)); }
+    // ── SEED DE DATOS ──
+    // Cambiá SEED_ID cada vez que actualices los datos embebidos para forzar recarga.
+    const SEED_ID = 'backup-2026-04-15-v2';
+    const seed = {"fiestas":[{"estadoManual":null,"total":5500000,"fContrato":"2026-04-15","fEvento":"2027-03-30","tipo":"Cumpleaños","tarifas":[{"desc":"Adultos","pers":100,"val":48000},{"desc":"Niños","pers":20,"val":35000}],"hInicio":"22:00","obs":"","hFin":"05:30","cobrado":4625000,"id":1,"modalidad":"Salón con catering","agasajado":"Soria Luis Alfredo","invitados":120,"cliente":"Soria Luis Alfredo"}],"ctaCteData":{"Soria Luis Alfredo":{"celular":"3863521669","movimientos":[{"importe":4625000,"medio":"Efectivo","fecha":"14/04/2026","concepto":"Cobro registrado"}],"avatar":"SL","email":"luisorialfredo@hotmail.com"}},"conceptos":[{"id":1,"nombre":"DJ / Música","clasif":"variable"},{"clasif":"variable","nombre":"Catering","id":2},{"id":3,"clasif":"variable","nombre":"Decoración"},{"id":4,"clasif":"fijo","nombre":"Sueldos"},{"nombre":"Luz y servicios","clasif":"fijo","id":5},{"clasif":"fijo","nombre":"Limpieza","id":6},{"clasif":"estructura","nombre":"Mantenimiento","id":7},{"id":8,"clasif":"estructura","nombre":"Publicidad"},{"id":9,"nombre":"Alquiler","clasif":"estructura"},{"nombre":"Otro","clasif":"estructura","id":10}],"clientes":[{"nombre":"Soria Luis Alfredo","fnac":"1979-03-30","cel":"3863521669","email":"luisorialfredo@hotmail.com","dom":"24 de Septiembre - Monteros","agasNombre":"Soria Luis Alfredo","agasFnac":"1979-03-30","obs":"Prueba"}],"cobros":[],"pagos":[]};
+
+    const storedSeedId = localStorage.getItem('es_seed_id');
+
+    if (storedSeedId !== SEED_ID) {
+      // Seed nuevo → pisar localStorage con datos del HTML
+      fiestas.length=0;   seed.fiestas.forEach(x=>fiestas.push(x));
+      clientes.length=0;  seed.clientes.forEach(x=>clientes.push(x));
+      conceptos.length=0; seed.conceptos.forEach(x=>conceptos.push(x));
+      cobros.length=0;    (seed.cobros||[]).forEach(x=>cobros.push(x));
+      pagos.length=0;     (seed.pagos||[]).forEach(x=>pagos.push(x));
+      Object.keys(ctaCteData).forEach(k=>delete ctaCteData[k]);
+      Object.assign(ctaCteData, seed.ctaCteData);
+      localStorage.setItem('es_seed_id',   SEED_ID);
+      localStorage.setItem('es_fiestas',   JSON.stringify(fiestas));
+      localStorage.setItem('es_clientes',  JSON.stringify(clientes));
+      localStorage.setItem('es_ctacte',    JSON.stringify(ctaCteData));
+      localStorage.setItem('es_conceptos', JSON.stringify(conceptos));
+      localStorage.setItem('es_cobros',    JSON.stringify(cobros));
+      localStorage.setItem('es_pagos',     JSON.stringify(pagos));
+    } else {
+      // Mismo seed → cargar desde localStorage (preserva cambios del usuario)
+      const f  = localStorage.getItem('es_fiestas');
+      const cl = localStorage.getItem('es_clientes');
+      const cc = localStorage.getItem('es_ctacte');
+      const co = localStorage.getItem('es_conceptos');
+      const cb = localStorage.getItem('es_cobros');
+      const pg = localStorage.getItem('es_pagos');
+      if (f)  { const d=JSON.parse(f);  fiestas.length=0;  d.forEach(x=>fiestas.push(x)); }
+      if (cl) { const d=JSON.parse(cl); clientes.length=0; d.forEach(x=>clientes.push(x)); }
+      if (cc) {
+        const d=JSON.parse(cc);
+        // Migración: renombrar clave 'bbbbbb' si existe
+        if (d['bbbbbb'] && !d['Soria Luis Alfredo']) {
+          d['Soria Luis Alfredo'] = d['bbbbbb'];
+          d['Soria Luis Alfredo'].avatar = 'SL';
+          delete d['bbbbbb'];
+        }
+        Object.keys(ctaCteData).forEach(k=>delete ctaCteData[k]);
+        Object.assign(ctaCteData, d);
+      }
+      if (co) { const d=JSON.parse(co); conceptos.length=0; d.forEach(x=>conceptos.push(x)); }
+      if (cb) { const d=JSON.parse(cb); cobros.length=0;  d.forEach(x=>cobros.push(x)); }
+      if (pg) { const d=JSON.parse(pg); pagos.length=0;   d.forEach(x=>pagos.push(x)); }
+    }
   } catch(e) { console.warn('Error cargando datos:', e); }
 }
+
+// ── INDICADOR FIREBASE + BOTÓN PUSH ──
+function setFbStatus(estado) {
+  // estado: 'conectado' | 'desconectado' | 'guardando' | 'ok' | 'error'
+  const dot   = document.getElementById('fb-dot');
+  const label = document.getElementById('fb-label');
+  const btnPush = document.getElementById('btn-push-firebase');
+  if (!dot || !label) return;
+  const cfg = {
+    conectado:    { color:'var(--green)',  texto:'Firebase conectado',  btn:true  },
+    desconectado: { color:'var(--red)',    texto:'Sin conexión',         btn:false },
+    guardando:    { color:'var(--amber)',  texto:'Guardando…',           btn:false },
+    ok:           { color:'var(--green)',  texto:'✓ Guardado',           btn:true  },
+    error:        { color:'var(--red)',    texto:'Error al guardar',      btn:true  },
+    local:        { color:'var(--text-dim)', texto:'Modo local',         btn:true  },
+  };
+  const c = cfg[estado] || cfg.local;
+  dot.style.background = c.color;
+  label.textContent    = c.texto;
+  if (btnPush) btnPush.style.display = c.btn ? 'inline-flex' : 'none';
+  // Volver a "conectado" después de guardar ok/error
+  if (estado === 'ok' || estado === 'error') {
+    setTimeout(() => setFbStatus('conectado'), 3000);
+  }
+}
+
+async function pushFirebase() {
+  if (!firebaseOk || !db) {
+    alert('Firebase no disponible. Verificá tu conexión a internet.');
+    return;
+  }
+  if (!currentUID) {
+    // En DEV_MODE: pedir email/pass y guardar de inmediato
+    const email = prompt('Email de Firebase:');
+    if (!email) return;
+    const pass  = prompt('Contraseña:');
+    if (!pass) return;
+    setFbStatus('guardando');
+    try {
+      const cred = await auth.signInWithEmailAndPassword(email, pass);
+      currentUID = cred.user.uid;
+      await guardarFirestore();
+      setFbStatus('ok');
+    } catch(e) {
+      alert('Error de autenticación: ' + traducirError(e.code));
+      setFbStatus('error');
+    }
+    return;
+  }
+  setFbStatus('guardando');
+  try {
+    await guardarFirestore();
+    setFbStatus('ok');
+  } catch(e) {
+    console.error(e);
+    setFbStatus('error');
+  }
+}
+
+// Estado de red
+window.addEventListener('online',  () => { if(currentUID) setFbStatus('conectado'); });
+window.addEventListener('offline', () => setFbStatus('desconectado'));
 
 // Init (se ejecuta al cargar, auth.onAuthStateChanged maneja el render)
 calcPrice();
