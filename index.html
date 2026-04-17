@@ -797,6 +797,11 @@ select.form-input option { background: var(--surface2); }
     <div class="nav-item" onclick="goTo(this,'precios')">
       <span class="nav-icon">◑</span> Calculadora
     </div>
+
+    <div class="nav-section-label" style="margin-top:16px;">Sistema</div>
+    <div class="nav-item" onclick="goTo(this,'config')">
+      <span class="nav-icon">⚙</span> Configuración
+    </div>
   </nav>
 
   <div class="sidebar-footer">
@@ -806,7 +811,7 @@ select.form-input option { background: var(--surface2); }
         <div class="btn" style="width:100%;font-size:12px;padding:7px;text-align:center;cursor:pointer;">⬆ Importar datos JSON</div>
         <input type="file" accept=".json" onchange="importarBackup(event)" style="display:none;">
       </label>
-      <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:2px;">Temporada 2025 · Aguilares</div>
+      <div id="footer-salon-nombre" style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:2px;">Élite Salones</div>
     </div>
   </div>
 </aside>
@@ -1281,6 +1286,52 @@ select.form-input option { background: var(--surface2); }
       </div>
     </section>
 
+    <!-- ══════ CONFIGURACIÓN ══════ -->
+    <section class="panel" id="panel-config">
+      <div class="card" style="max-width:600px;">
+        <div class="card-header">
+          <div class="card-title">⚙ Datos del salón</div>
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
+          Esta información aparece en los recibos y documentos del sistema.
+        </div>
+        <div class="form-grid">
+          <div class="form-group full">
+            <div class="form-label">Nombre del salón</div>
+            <input class="form-input" id="cfg-nombre" placeholder="Ej: Salón Élite">
+          </div>
+          <div class="form-group">
+            <div class="form-label">Teléfono / Celular</div>
+            <input class="form-input" id="cfg-tel" placeholder="Ej: 381-555-0000">
+          </div>
+          <div class="form-group">
+            <div class="form-label">Correo electrónico</div>
+            <input class="form-input" id="cfg-email" type="email" placeholder="contacto@salon.com">
+          </div>
+          <div class="form-group full">
+            <div class="form-label">Dirección</div>
+            <input class="form-input" id="cfg-direccion" placeholder="Ej: San Martín 450">
+          </div>
+          <div class="form-group">
+            <div class="form-label">Localidad</div>
+            <input class="form-input" id="cfg-localidad" placeholder="Ej: Aguilares">
+          </div>
+          <div class="form-group">
+            <div class="form-label">Provincia</div>
+            <input class="form-input" id="cfg-provincia" placeholder="Ej: Tucumán">
+          </div>
+          <div class="form-group">
+            <div class="form-label">Código postal</div>
+            <input class="form-input" id="cfg-cp" placeholder="Ej: 4200">
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:24px;">
+          <button class="btn btn-primary" style="padding:9px 28px;" onclick="guardarConfig()">💾 Guardar configuración</button>
+        </div>
+        <div id="cfg-saved-msg" style="display:none;text-align:right;font-size:12px;color:var(--green);margin-top:8px;">✓ Configuración guardada</div>
+      </div>
+    </section>
+
   </div><!-- /content -->
 </main>
 
@@ -1447,8 +1498,8 @@ select.form-input option { background: var(--surface2); }
 
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
         <div>
-          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--gold);">Élite Salones</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Aguilares, Tucumán</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;color:var(--gold);" class="brand-recibo-nombre">Élite Salones</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;" class="brand-recibo-loc">Aguilares, Tucumán</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Recibo de reserva</div>
@@ -1742,6 +1793,56 @@ select.form-input option { background: var(--surface2); }
 </div>
 
 <script>
+// ── CONFIGURACIÓN DEL SALÓN ──
+const configSalon = {
+  nombre: '', tel: '', email: '', direccion: '', localidad: '', provincia: '', cp: ''
+};
+
+function guardarConfig() {
+  configSalon.nombre    = document.getElementById('cfg-nombre')?.value.trim()    || '';
+  configSalon.tel       = document.getElementById('cfg-tel')?.value.trim()       || '';
+  configSalon.email     = document.getElementById('cfg-email')?.value.trim()     || '';
+  configSalon.direccion = document.getElementById('cfg-direccion')?.value.trim() || '';
+  configSalon.localidad = document.getElementById('cfg-localidad')?.value.trim() || '';
+  configSalon.provincia = document.getElementById('cfg-provincia')?.value.trim() || '';
+  configSalon.cp        = document.getElementById('cfg-cp')?.value.trim()        || '';
+  localStorage.setItem('es_config', JSON.stringify(configSalon));
+  aplicarConfigUI();
+  const msg = document.getElementById('cfg-saved-msg');
+  if (msg) { msg.style.display = 'block'; setTimeout(() => msg.style.display='none', 3000); }
+}
+
+function cargarConfig() {
+  try {
+    const raw = localStorage.getItem('es_config');
+    if (raw) Object.assign(configSalon, JSON.parse(raw));
+  } catch(e) {}
+  aplicarConfigUI();
+}
+
+function cargarConfigEnForm() {
+  const campos = ['nombre','tel','email','direccion','localidad','provincia','cp'];
+  campos.forEach(k => {
+    const el = document.getElementById('cfg-'+k);
+    if (el) el.value = configSalon[k] || '';
+  });
+}
+
+function aplicarConfigUI() {
+  const footer = document.getElementById('footer-salon-nombre');
+  if (footer) {
+    const loc = [configSalon.localidad, configSalon.provincia].filter(Boolean).join(', ');
+    footer.textContent = (configSalon.nombre || 'Élite Salones') + (loc ? ' · ' + loc : '');
+  }
+  const reciboNombre = document.querySelector('#recibo-contenido .brand-recibo-nombre');
+  const reciboLoc    = document.querySelector('#recibo-contenido .brand-recibo-loc');
+  if (reciboNombre) reciboNombre.textContent = configSalon.nombre || 'Élite Salones';
+  if (reciboLoc) {
+    const loc = [configSalon.localidad, configSalon.provincia].filter(Boolean).join(', ');
+    reciboLoc.textContent = loc || 'Aguilares, Tucumán';
+  }
+}
+
 // ── SIDEBAR MOBILE ──
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
@@ -1757,7 +1858,8 @@ const titles = {
   dashboard:'Inicio', agenda:'Agenda', fiestas:'Fiestas',
   clientes:'Clientes', ctacte:'Cuenta corriente', caja:'Caja y cobros',
   cobros:'Cobros varios', pagos:'Pagos varios',
-  negocio:'Mi negocio', precios:'Calculadora de precios'
+  negocio:'Mi negocio', precios:'Calculadora de precios',
+  config:'Configuración'
 };
 
 function goToCtaCte(el) {
@@ -1776,6 +1878,7 @@ function goTo(el, id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + id).classList.add('active');
   document.getElementById('page-title').textContent = titles[id] || '';
+  if (id === 'config') cargarConfigEnForm();
   closeSidebar();
 }
 
@@ -3460,7 +3563,7 @@ guardarLocal = function() {
 if (DEV_MODE) {
   // Modo desarrollo: entrar directo sin login
   setFbStatus('local');
-  cargarLocal();
+  cargarLocal(); cargarConfig();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sidebar').style.display = 'flex';
   document.getElementById('main-app').style.display = 'flex';
@@ -3473,7 +3576,7 @@ if (DEV_MODE) {
       if (user) {
         currentUID = user.uid;
         setFbStatus('conectado');
-        cargarLocal();
+        cargarLocal(); cargarConfig();
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('sidebar').style.display = 'flex';
         document.getElementById('main-app').style.display = 'flex';
@@ -3505,7 +3608,6 @@ if (DEV_MODE) {
       }
     });
   } catch(e) {
-    // Firebase auth error — modo local
     mostrarAppLocal();
   }
 } else {
@@ -3514,7 +3616,7 @@ if (DEV_MODE) {
 
 function mostrarAppLocal() {
   setFbStatus('local');
-  cargarLocal();
+  cargarLocal(); cargarConfig();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sidebar').style.display = 'flex';
   document.getElementById('main-app').style.display = 'flex';
